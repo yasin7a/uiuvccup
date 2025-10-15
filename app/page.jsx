@@ -13,20 +13,20 @@ export default function Home() {
                 <Image
                   src="/assets/uiuvccuplogo.png"
                   alt="UIU VC Cup Logo"
-                  width={40}
-                  height={40}
+                  width={60}
+                  height={60}
                   className="rounded-full"
                 />
-                <span className="text-xl font-bold text-black">
+                {/* <span className="text-xl font-bold text-black">
                   UIU VC Cup
-                </span>
+                </span> */}
               </div>
               <div className="hidden md:flex items-center space-x-8">
                 <Link href="/" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">HOME</Link>
                 <Link href="/teams" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">TEAMS</Link>
                 <Link href="/auction" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">AUCTION</Link>
                 <Link href="/about" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">ABOUT</Link>
-                <Link href="/blog" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">BLOG</Link>
+                {/* <Link href="/blog" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">BLOG</Link> */}
                 <Link 
                   href="/login" 
                   className="bg-[#D0620D] px-6 py-2 rounded-full text-white font-medium hover:bg-[#B8540B] transition-all duration-300"
@@ -88,14 +88,14 @@ export default function Home() {
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 pt-4">
                 <button className="group bg-white text-black px-8 py-4 rounded-lg font-semibold text-lg hover:bg-gray-100 transition-all duration-300 flex items-center justify-center space-x-2">
-                  <span>Explore Matches</span>
+                  <span>Explore Teams</span>
                   <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
-                <button className="border-2 border-[#D0620D] text-[#D0620D] px-8 py-4 rounded-lg font-semibold text-lg hover:bg-[#D0620D] hover:text-white transition-all duration-300">
+                {/* <button className="border-2 border-[#D0620D] text-[#D0620D] px-8 py-4 rounded-lg font-semibold text-lg hover:bg-[#D0620D] hover:text-white transition-all duration-300">
                   Join Tournament
-                </button>
+                </button> */}
               </div>
             </div>
           </div>
@@ -114,81 +114,81 @@ export default function Home() {
               {/* Teams Grid */}
               <div className="flex-1 grid grid-cols-8 h-full">
                 {/* Team 1 - Fire Cats */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 1</div>
+                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU TIGERS</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-[#D0620D] rounded-full"></div>
-                    <span className="text-white text-sm font-bold">FC</span>
+                    <span className="text-white text-sm font-bold">UT</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
 
                 {/* Team 2 - Thunder */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 2</div>
+                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU EAGLES</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">TH</span>
+                    <span className="text-white text-sm font-bold">UE</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
 
                 {/* Team 3 - Storm */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 3</div>
+                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU LIONS</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">ST</span>
+                    <span className="text-white text-sm font-bold">UL</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
 
                 {/* Team 4 - Lions */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 4</div>
+                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU PANTHERS</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">LI</span>
+                    <span className="text-white text-sm font-bold">UP</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
 
                 {/* Team 5 - Eagles */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 5</div>
+                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU FALCONS</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">EA</span>
+                    <span className="text-white text-sm font-bold">UF</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
 
                 {/* Team 6 - Tigers */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 6</div>
+                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU WOLVES</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">TI</span>
+                    <span className="text-white text-sm font-bold">UW</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
 
                 {/* Team 7 - Wolves */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 7</div>
+                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU HAWKS</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">WO</span>
+                    <span className="text-white text-sm font-bold">UH</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
 
                 {/* Team 8 - Phoenix */}
-                <div className="px-4 py-3 flex flex-col justify-center hover:opacity-80 transition-opacity" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">TEAM 8</div>
+                <div className="px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-white text-xs font-semibold mb-1">UIU PHOENIX</div>
                   <div className="flex items-center space-x-2">
                     <div className="w-3 h-3 bg-pink-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">PH</span>
+                    <span className="text-white text-sm font-bold">UX</span>
                   </div>
                   <div className="text-gray-400 text-xs mt-1">17 Players</div>
                 </div>
@@ -218,8 +218,8 @@ export default function Home() {
                 <div className="text-gray-300">Current Auction Round</div>
               </div>
               <div className="rounded-xl p-6 shadow-sm border border-gray-600" style={{ backgroundColor: '#0A0D13' }}>
-                <div className="text-3xl font-bold text-[#D0620D] mb-2">136</div>
-                <div className="text-gray-300">Total Players</div>
+                <div className="text-3xl font-bold text-[#D0620D] mb-2">৳4,500</div>
+                <div className="text-gray-300">Highest Bid</div>
               </div>
               <div className="rounded-xl p-6 shadow-sm border border-gray-600" style={{ backgroundColor: '#0A0D13' }}>
                 <div className="text-3xl font-bold text-[#D0620D] mb-2">2:45</div>
@@ -246,29 +246,31 @@ export default function Home() {
           
           <div className="grid md:grid-cols-4 gap-6">
             {[
-              { name: 'Fire Cats', players: 17, color: '#D0620D' },
-              { name: 'Thunder', players: 17, color: '#3B82F6' },
-              { name: 'Storm', players: 17, color: '#10B981' },
-              { name: 'Lions', players: 17, color: '#EF4444' },
-              { name: 'Eagles', players: 17, color: '#8B5CF6' },
-              { name: 'Tigers', players: 17, color: '#F59E0B' },
-              { name: 'Wolves', players: 17, color: '#6366F1' },
-              { name: 'Phoenix', players: 17, color: '#EC4899' }
+              { name: 'UIU Tigers', players: 17, budget: '৳25,000', color: '#D0620D' },
+              { name: 'UIU Eagles', players: 17, budget: '৳25,000', color: '#3B82F6' },
+              { name: 'UIU Lions', players: 17, budget: '৳25,000', color: '#10B981' },
+              { name: 'UIU Panthers', players: 17, budget: '৳25,000', color: '#EF4444' },
+              { name: 'UIU Falcons', players: 17, budget: '৳25,000', color: '#8B5CF6' },
+              { name: 'UIU Wolves', players: 17, budget: '৳25,000', color: '#F59E0B' },
+              { name: 'UIU Hawks', players: 17, budget: '৳25,000', color: '#6366F1' },
+              { name: 'UIU Phoenix', players: 17, budget: '৳25,000', color: '#EC4899' }
             ].map((team, index) => (
-              <div key={index} className="rounded-xl p-6 shadow-sm hover:shadow-md transition-shadow border border-gray-600" style={{ backgroundColor: '#0A0D13' }}>
-                <div className="flex items-center mb-4">
-                  <div 
-                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                    style={{ backgroundColor: team.color }}
-                  >
-                    {team.name.substring(0, 2).toUpperCase()}
-                  </div>
-                  <div className="ml-3">
-                    <h3 className="font-bold text-white">{team.name}</h3>
-                    <p className="text-sm text-gray-300">{team.players} Players</p>
+              <Link key={index} href={`/teams/${team.name.toLowerCase().replace(' ', '-')}`} className="block">
+                <div className="rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-600 hover:border-[#D0620D] cursor-pointer" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="flex items-center">
+                    <div 
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                      style={{ backgroundColor: team.color }}
+                    >
+                      {team.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="font-bold text-white">{team.name}</h3>
+                      <p className="text-sm text-gray-300">{team.players} Players</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -279,22 +281,24 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-white mb-4">Player Categories</h2>
-            <p className="text-xl text-gray-300">Different player types available for the tournament</p>
+            <p className="text-xl text-gray-300">Different player types and their base prices</p>
           </div>
           
           <div className="grid md:grid-cols-4 gap-6">
             {[
-              { category: 'Goalkeeper', count: 16, icon: '🥅' },
-              { category: 'Defender', count: 40, icon: '🛡️' },
-              { category: 'Midfielder', count: 48, icon: '⚽' },
-              { category: 'Forward', count: 32, icon: '🎯' }
+              { category: 'Goalkeeper', count: 16, basePrice: '৳1,500', icon: '🥅' },
+              { category: 'Defender', count: 40, basePrice: '৳1,200', icon: '🛡️' },
+              { category: 'Midfielder', count: 48, basePrice: '৳1,800', icon: '⚽' },
+              { category: 'Forward', count: 32, basePrice: '৳2,000', icon: '🎯' }
             ].map((category, index) => (
-              <div key={index} className="rounded-xl p-6 text-center border border-gray-700" style={{ backgroundColor: '#0A0D13' }}>
-                <div className="text-4xl mb-4">{category.icon}</div>
-                <h3 className="text-xl font-bold text-white mb-2">{category.category}</h3>
-                <p className="text-gray-300">{category.count} Available</p>
-              </div>
-            )})}
+              <Link key={index} href={`/players/${category.category.toLowerCase()}`} className="block">
+                <div className="rounded-xl p-6 text-center border border-gray-700 hover:border-[#D0620D] transition-all duration-300 cursor-pointer hover:scale-105" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="text-4xl mb-4">{category.icon}</div>
+                  <h3 className="text-xl font-bold text-white mb-2">{category.category}</h3>
+                  <p className="text-gray-300">{category.count} Available</p>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       </section>
