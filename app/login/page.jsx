@@ -1,7 +1,33 @@
+'use client';
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Login() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+
+    try {
+      setError('');
+      setLoading(true);
+      await login(email, password);
+      router.push('/dashboard/team'); // Redirect to dashboard after successful login
+    } catch (error) {
+      setError('Failed to log in. Please check your credentials.');
+      console.error('Login error:', error);
+    }
+
+    setLoading(false);
+  }
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center">
       {/* Background Pattern */}
@@ -27,16 +53,25 @@ export default function Login() {
         </div>
 
         {/* Login Form */}
-        <div className="bg-gray-900/50 backdrop-blur-sm border border-gray-800 rounded-2xl p-8">
-          <form className="space-y-6">
+        <div className="bg-gray-900 rounded-2xl p-8 shadow-2xl border border-gray-800">
+          {error && (
+            <div className="mb-4 p-3 bg-red-900 border border-red-700 rounded-lg text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
                 Email Address
               </label>
               <input
-                type="email"
                 id="email"
-                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all duration-200"
+                name="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#D0620D] focus:border-transparent"
                 placeholder="Enter your email"
               />
             </div>
@@ -46,31 +81,23 @@ export default function Login() {
                 Password
               </label>
               <input
-                type="password"
                 id="password"
-                className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none transition-all duration-200"
+                name="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#D0620D] focus:border-transparent"
                 placeholder="Enter your password"
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  className="w-4 h-4 text-orange-500 bg-gray-800 border-gray-600 rounded focus:ring-orange-500"
-                />
-                <span className="ml-2 text-sm text-gray-300">Remember me</span>
-              </label>
-              <Link href="/forgot-password" className="text-sm text-orange-500 hover:text-orange-400 transition-colors">
-                Forgot password?
-              </Link>
-            </div>
-
             <button
               type="submit"
-              className="w-full btn-primary py-3 rounded-lg text-white font-semibold text-lg"
+              disabled={loading}
+              className="w-full bg-[#D0620D] text-white py-3 px-4 rounded-lg font-semibold hover:bg-[#B8540B] transition-colors focus:outline-none focus:ring-2 focus:ring-[#D0620D] focus:ring-offset-2 focus:ring-offset-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign In
+              {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 

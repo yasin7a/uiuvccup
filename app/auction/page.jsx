@@ -1,57 +1,188 @@
+'use client';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { teamsService, playersService } from '../../lib/firebaseService';
 
 export default function Auction() {
-  const currentPlayer = {
-    name: 'Shakib Al Hasan',
-    position: 'Forward',
-    age: 22,
-    department: 'CSE',
-    semester: '8th',
-    studentId: 'UIU-2021-001',
-    basePrice: 2500,
-    currentBid: 4500,
-    highestBidder: 'UIU Tigers',
-    image: '/assets/player-placeholder.jpg',
-    stats: {
-      goals: 12,
-      assists: 8,
-      matches: 15
+  const [teams, setTeams] = useState([]);
+  const [unassignedPlayers, setUnassignedPlayers] = useState([]);
+  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
+  const [bidAmount, setBidAmount] = useState('');
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [bidHistory, setBidHistory] = useState([]);
+  const [currentBids, setCurrentBids] = useState([]);
+  const [highestBid, setHighestBid] = useState(0);
+  const [highestBidder, setHighestBidder] = useState('');
+  const [auctionTimer, setAuctionTimer] = useState(30); // 30 seconds per player
+  const [isAuctionActive, setIsAuctionActive] = useState(false);
+  const [showAssignmentResult, setShowAssignmentResult] = useState(false);
+  const [assignmentResult, setAssignmentResult] = useState(null);
+
+  useEffect(() => {
+    loadAuctionData();
+  }, []);
+
+  // Timer effect for auction countdown
+  useEffect(() => {
+    let interval;
+    if (isAuctionActive && auctionTimer > 0) {
+      interval = setInterval(() => {
+        setAuctionTimer(prev => prev - 1);
+      }, 1000);
+    } else if (auctionTimer === 0 && isAuctionActive) {
+      // Time's up - assign player to highest bidder
+      assignPlayerToWinner();
+    }
+    return () => clearInterval(interval);
+  }, [isAuctionActive, auctionTimer]);
+
+  // Start auction for current player
+  const startAuction = () => {
+    setIsAuctionActive(true);
+    setAuctionTimer(30);
+    setCurrentBids([]);
+    setHighestBid(0);
+    setHighestBidder('');
+  };
+
+  // Assign player to highest bidder when timer ends
+  const assignPlayerToWinner = async () => {
+    if (!currentPlayer || !highestBidder) {
+      // No bids, show skipped message and move to next player
+      setAssignmentResult({
+        player: currentPlayer,
+        team: null,
+        amount: 0,
+        type: 'skipped'
+      });
+      setShowAssignmentResult(true);
+      
+      // Hide result after 3 seconds and move to next player
+      setTimeout(() => {
+        setShowAssignmentResult(false);
+        moveToNextPlayer();
+      }, 3000);
+      return;
+    }
+
+    try {
+      // Assign player to highest bidding team
+      await playersService.assignToTeam(currentPlayer.id, highestBidder);
+      
+      // Add to bid history
+      setBidHistory(prev => [
+        { 
+          team: highestBidder, 
+          amount: highestBid, 
+          time: 'Just now',
+          player: currentPlayer.name
+        },
+        ...prev
+      ]);
+      
+      // Show assignment result
+      setAssignmentResult({
+        player: currentPlayer,
+        team: highestBidder,
+        amount: highestBid,
+        type: 'sold'
+      });
+      setShowAssignmentResult(true);
+      
+      // Hide result after 3 seconds and move to next player
+      setTimeout(() => {
+        setShowAssignmentResult(false);
+        moveToNextPlayer();
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error assigning player:', error);
+      alert('Failed to assign player. Please try again.');
     }
   };
 
-  const upcomingPlayers = [
-    { name: 'Tamim Iqbal', position: 'Midfielder', department: 'EEE', basePrice: 3000, semester: '7th' },
-    { name: 'Mushfiqur Rahman', position: 'Defender', department: 'BBA', basePrice: 2800, semester: '6th' },
-    { name: 'Liton Das', position: 'Goalkeeper', department: 'CSE', basePrice: 2200, semester: '8th' },
-    { name: 'Mahmudullah Riyad', position: 'Forward', department: 'Civil', basePrice: 2400, semester: '5th' }
-  ];
+  // Move to next player and reset auction state
+  const moveToNextPlayer = () => {
+    // Remove current player from unassigned list
+    setUnassignedPlayers(prev => prev.filter((_, index) => index !== currentPlayerIndex));
+    
+    // Reset auction state for next player
+    setIsAuctionActive(false);
+    setCurrentBids([]);
+    setHighestBid(0);
+    setHighestBidder('');
+    setBidAmount('');
+    setSelectedTeam('');
+    setAuctionTimer(30);
+    
+    // Don't increment currentPlayerIndex since we removed the current player from array
+    // The next player will automatically be at the same index
+  };
 
-  const recentSales = [
-    { name: 'Mashrafe Mortaza', team: 'UIU Tigers', price: 5000, position: 'Forward', department: 'CSE' },
-    { name: 'Soumya Sarkar', team: 'UIU Eagles', price: 4800, position: 'Midfielder', department: 'EEE' },
-    { name: 'Mustafizur Rahman', team: 'UIU Lions', price: 4200, position: 'Defender', department: 'BBA' },
-    { name: 'Mehidy Hasan', team: 'UIU Panthers', price: 4500, position: 'Midfielder', department: 'Civil' }
-  ];
+  const loadAuctionData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load teams and players in parallel
+      const [teamsData, playersData] = await Promise.all([
+        teamsService.getAll(),
+        playersService.getAll()
+      ]);
+      
+      // Filter unassigned players
+      const unassigned = playersData.filter(player => !player.team);
+      
+      setTeams(teamsData);
+      setUnassignedPlayers(unassigned);
+    } catch (error) {
+      console.error('Error loading auction data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const teams = [
-    { name: 'UIU Tigers', budget: 25000, spent: 18500, captain: 'Rafiqul Islam' },
-    { name: 'UIU Eagles', budget: 25000, spent: 19200, captain: 'Aminul Haque' },
-    { name: 'UIU Lions', budget: 25000, spent: 17800, captain: 'Shahidul Rahman' },
-    { name: 'UIU Panthers', budget: 25000, spent: 20100, captain: 'Mahbubur Rahman' },
-    { name: 'UIU Falcons', budget: 25000, spent: 16900, captain: 'Tanvir Ahmed' },
-    { name: 'UIU Wolves', budget: 25000, spent: 18700, captain: 'Nasir Uddin' },
-    { name: 'UIU Hawks', budget: 25000, spent: 19500, captain: 'Karim Hassan' },
-    { name: 'UIU Phoenix', budget: 25000, spent: 17300, captain: 'Farhan Ali' }
-  ];
+  const currentPlayer = unassignedPlayers[currentPlayerIndex];
 
-  const bidHistory = [
-    { team: 'UIU Tigers', amount: 4500, time: '2:45' },
-    { team: 'UIU Eagles', amount: 4200, time: '2:50' },
-    { team: 'UIU Lions', amount: 3800, time: '2:55' },
-    { team: 'UIU Panthers', amount: 3500, time: '3:00' },
-    { team: 'UIU Tigers', amount: 3200, time: '3:05' }
-  ];
+  const handlePlaceBid = () => {
+    if (!bidAmount || !selectedTeam || !currentPlayer || !isAuctionActive) return;
+    
+    const bidAmountNum = parseInt(bidAmount);
+    if (bidAmountNum <= highestBid) {
+      alert(`Bid must be higher than current highest bid of ৳${highestBid.toLocaleString()}`);
+      return;
+    }
+
+    // Add bid to current bids
+    const newBid = {
+      team: selectedTeam,
+      amount: bidAmountNum,
+      time: new Date().toLocaleTimeString(),
+      player: currentPlayer.name
+    };
+
+    setCurrentBids(prev => [newBid, ...prev]);
+    
+    // Update highest bid
+    setHighestBid(bidAmountNum);
+    setHighestBidder(selectedTeam);
+    
+    // Reset form
+    setBidAmount('');
+    setSelectedTeam('');
+    
+    // Extend timer by 5 seconds if less than 10 seconds left
+    if (auctionTimer < 10) {
+      setAuctionTimer(prev => Math.min(prev + 5, 30));
+    }
+  };
+
+  const skipPlayer = () => {
+    // Move to next player without assigning current one
+    moveToNextPlayer();
+  };
+
 
   return (
     <div className="min-h-screen text-white" style={{ backgroundColor: '#0A0D13' }}>
@@ -107,123 +238,261 @@ export default function Auction() {
       {/* Current Auction */}
       <section className="py-16" style={{ backgroundColor: '#0A0D13' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Player Info */}
-            <div className="lg:col-span-2">
-              <div className="border border-gray-700 rounded-2xl p-8" style={{ backgroundColor: '#0A0D13' }}>
-                <div className="flex items-center justify-between mb-6">
-                  <div className="inline-flex items-center space-x-2 border border-[#D0620D] rounded-full px-4 py-2">
-                    <div className="w-2 h-2 bg-[#D0620D] rounded-full animate-pulse"></div>
-                    <span className="text-[#D0620D] text-sm font-medium uppercase tracking-wider">Live Auction</span>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-[#D0620D]">2:45</div>
-                    <div className="text-gray-300 text-sm">Time Left</div>
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div>
-                    <div className="w-64 h-64 bg-gray-800 rounded-2xl flex items-center justify-center border border-gray-700 mx-auto mb-6">
-                      <div className="text-6xl">⚽</div>
+          {loading ? (
+            <div className="text-center py-16">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D0620D] mx-auto mb-4"></div>
+              <p className="text-gray-300">Loading auction data...</p>
+            </div>
+          ) : showAssignmentResult ? (
+            <div className="text-center py-16">
+              <div className="max-w-md mx-auto">
+                {assignmentResult.type === 'sold' ? (
+                  <div className="bg-green-900 border border-green-600 rounded-2xl p-8">
+                    <div className="text-6xl mb-4">🎉</div>
+                    <h2 className="text-3xl font-bold text-white mb-4">SOLD!</h2>
+                    <div className="space-y-3">
+                      <p className="text-xl text-white font-semibold">{assignmentResult.player.name}</p>
+                      <p className="text-green-300">
+                        Assigned to <strong>{assignmentResult.team}</strong>
+                      </p>
+                      <p className="text-2xl font-bold text-green-400">
+                        ৳{assignmentResult.amount.toLocaleString()}
+                      </p>
                     </div>
                   </div>
-                  
-                  <div>
-                    <h2 className="text-3xl font-bold text-white mb-4">{currentPlayer.name}</h2>
-                    <div className="space-y-3 mb-6">
-                      <div className="flex items-center space-x-2">
-                        <span className="bg-[#D0620D] px-3 py-1 rounded-full text-sm text-white">{currentPlayer.position}</span>
-                        <span className="bg-gray-800 px-3 py-1 rounded-full text-sm">Age: {currentPlayer.age}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="bg-gray-800 px-3 py-1 rounded-full text-sm">{currentPlayer.department}</span>
-                        <span className="bg-gray-800 px-3 py-1 rounded-full text-sm">{currentPlayer.semester} Semester</span>
-                      </div>
-                      <div className="bg-gray-800 px-3 py-1 rounded-full text-sm inline-block">ID: {currentPlayer.studentId}</div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-4 mb-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-[#D0620D]">{currentPlayer.stats.goals}</div>
-                        <div className="text-gray-300 text-sm">Goals</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-[#D0620D]">{currentPlayer.stats.assists}</div>
-                        <div className="text-gray-300 text-sm">Assists</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-[#D0620D]">{currentPlayer.stats.matches}</div>
-                        <div className="text-gray-300 text-sm">Matches</div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 mb-6">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-300">Base Price:</span>
-                        <span className="text-white font-semibold">৳{currentPlayer.basePrice.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-300">Current Bid:</span>
-                        <span className="text-[#D0620D] font-bold text-2xl">৳{currentPlayer.currentBid.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-300">Highest Bidder:</span>
-                        <span className="text-white font-semibold">{currentPlayer.highestBidder}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-3">
-                      <button className="bg-[#D0620D] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#B8540B] transition-colors">
-                        Place Bid (+৳500)
-                      </button>
-                      <div className="flex gap-3">
-                        <button className="border border-[#D0620D] text-[#D0620D] px-4 py-2 rounded-lg font-semibold hover:bg-[#D0620D] hover:text-white transition-colors flex-1">
-                          Auto Bid
-                        </button>
-                        <button className="border border-gray-600 text-gray-300 px-4 py-2 rounded-lg font-semibold hover:bg-gray-700 transition-colors flex-1">
-                          Watch
-                        </button>
-                      </div>
+                ) : (
+                  <div className="bg-yellow-900 border border-yellow-600 rounded-2xl p-8">
+                    <div className="text-6xl mb-4">⏭️</div>
+                    <h2 className="text-3xl font-bold text-white mb-4">SKIPPED</h2>
+                    <div className="space-y-3">
+                      <p className="text-xl text-white font-semibold">{assignmentResult.player.name}</p>
+                      <p className="text-yellow-300">No bids received</p>
+                      <p className="text-gray-400">Moving to next player...</p>
                     </div>
                   </div>
+                )}
+                <div className="mt-6">
+                  <div className="text-gray-400 text-sm">Next player in 3 seconds...</div>
                 </div>
               </div>
             </div>
-
-            {/* Bid History & Team Status */}
-            <div className="space-y-6">
-              {/* Bid History */}
-              <div className="border border-gray-700 rounded-xl p-6" style={{ backgroundColor: '#0A0D13' }}>
-                <h3 className="text-xl font-bold text-white mb-4">Bid History</h3>
-                <div className="space-y-3">
-                  {bidHistory.map((bid, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
-                      <div>
-                        <div className="text-white font-semibold text-sm">{bid.team}</div>
-                        <div className="text-gray-400 text-xs">{bid.time} ago</div>
-                      </div>
-                      <div className="text-[#D0620D] font-bold">৳{bid.amount.toLocaleString()}</div>
+          ) : !currentPlayer || unassignedPlayers.length === 0 ? (
+            <div className="text-center py-16">
+              <h2 className="text-4xl font-bold text-white mb-4">Auction Complete!</h2>
+              <p className="text-gray-300 mb-6">All players have been assigned to teams.</p>
+              <Link href="/teams" className="bg-[#D0620D] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#B8540B] transition-colors">
+                View Teams
+              </Link>
+            </div>
+          ) : (
+            <div className="grid lg:grid-cols-3 gap-8">
+              {/* Player Info */}
+              <div className="lg:col-span-2">
+                <div className="border border-gray-700 rounded-2xl p-8" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="inline-flex items-center space-x-2 border border-[#D0620D] rounded-full px-4 py-2">
+                      <div className="w-2 h-2 bg-[#D0620D] rounded-full animate-pulse"></div>
+                      <span className="text-[#D0620D] text-sm font-medium uppercase tracking-wider">Live Auction</span>
                     </div>
-                  ))}
+                    <div className="text-right">
+                      <div className={`text-3xl font-bold ${auctionTimer <= 10 ? 'text-red-500 animate-pulse' : 'text-[#D0620D]'}`}>
+                        {isAuctionActive ? `${auctionTimer}s` : `${currentPlayerIndex + 1}/${unassignedPlayers.length}`}
+                      </div>
+                      <div className="text-gray-300 text-sm">
+                        {isAuctionActive ? 'Time Left' : 'Player Progress'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-8">
+                    <div>
+                      <div className="w-64 h-64 bg-gray-800 rounded-2xl flex items-center justify-center border border-gray-700 mx-auto mb-6">
+                        <div className="text-6xl">
+                          {currentPlayer.position === 'Goalkeeper' ? '🥅' : 
+                           currentPlayer.position === 'Defender' ? '🛡️' : 
+                           currentPlayer.position === 'Midfielder' ? '⚽' : '🎯'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <h2 className="text-3xl font-bold text-white mb-4">{currentPlayer.name}</h2>
+                      <div className="space-y-3 mb-6">
+                        <div className="flex items-center space-x-2">
+                          <span className="bg-[#D0620D] px-3 py-1 rounded-full text-sm text-white">{currentPlayer.position}</span>
+                          <span className="bg-gray-800 px-3 py-1 rounded-full text-sm">Age: {currentPlayer.age}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="bg-gray-800 px-3 py-1 rounded-full text-sm">{currentPlayer.department}</span>
+                          <span className="bg-gray-800 px-3 py-1 rounded-full text-sm">{currentPlayer.semester}</span>
+                        </div>
+                        <div className="bg-gray-800 px-3 py-1 rounded-full text-sm inline-block">ID: {currentPlayer.uniId}</div>
+                      </div>
+
+                      {/* Current Bid Status */}
+                      <div className="mb-6 p-4 bg-gray-800 rounded-lg">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-gray-300">Current Highest Bid:</span>
+                          <span className="text-[#D0620D] font-bold text-xl">
+                            {highestBid > 0 ? `৳${highestBid.toLocaleString()}` : 'No bids yet'}
+                          </span>
+                        </div>
+                        {highestBidder && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-gray-300">Leading Team:</span>
+                            <span className="text-white font-semibold">{highestBidder}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        {!isAuctionActive ? (
+                          <button 
+                            onClick={startAuction}
+                            className="w-full bg-green-600 text-white px-6 py-4 rounded-lg font-semibold hover:bg-green-700 transition-colors text-lg"
+                          >
+                            Start Auction for {currentPlayer.name}
+                          </button>
+                        ) : (
+                          <>
+                            {/* Team Selection */}
+                            <div className="space-y-2">
+                              <label className="text-gray-300 text-sm font-medium">Select Team</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {teams.map((team) => (
+                                  <button
+                                    key={team.id}
+                                    onClick={() => setSelectedTeam(team.name)}
+                                    className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
+                                      selectedTeam === team.name
+                                        ? 'border-[#D0620D] bg-[#D0620D] text-white'
+                                        : 'border-gray-600 text-gray-300 hover:border-gray-500'
+                                    }`}
+                                  >
+                                    {team.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Bid Amount */}
+                            <div className="space-y-2">
+                              <label className="text-gray-300 text-sm font-medium">Enter Bid Amount</label>
+                              <div className="flex gap-3">
+                                <div className="flex-1">
+                                  <input 
+                                    type="number" 
+                                    placeholder={`Minimum: ৳${(highestBid + 100).toLocaleString()}`}
+                                    value={bidAmount}
+                                    onChange={(e) => setBidAmount(e.target.value)}
+                                    min={highestBid + 100}
+                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:border-[#D0620D] focus:outline-none"
+                                  />
+                                </div>
+                                <button 
+                                  onClick={handlePlaceBid}
+                                  disabled={!bidAmount || !selectedTeam || parseInt(bidAmount) <= highestBid}
+                                  className="bg-[#D0620D] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#B8540B] transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
+                                >
+                                  Place Bid
+                                </button>
+                              </div>
+                              <p className="text-gray-400 text-xs">
+                                Minimum bid: ৳{(highestBid + 100).toLocaleString()}
+                              </p>
+                            </div>
+                          </>
+                        )}
+                        
+                        <div className="flex gap-3">
+                          <button 
+                            onClick={skipPlayer}
+                            disabled={isAuctionActive}
+                            className="border border-gray-600 text-gray-300 px-4 py-2 rounded-lg font-semibold hover:bg-gray-700 transition-colors flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Skip Player
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Team Budgets */}
+            {/* Bid History & Team Status */}
+            <div className="space-y-6">
+              {/* Current Auction Bids */}
               <div className="border border-gray-700 rounded-xl p-6" style={{ backgroundColor: '#0A0D13' }}>
-                <h3 className="text-xl font-bold text-white mb-4">Team Budgets</h3>
+                <h3 className="text-xl font-bold text-white mb-4">
+                  {isAuctionActive ? 'Current Bids' : 'Recent Sales'}
+                </h3>
                 <div className="space-y-3">
-                  {teams.slice(0, 4).map((team, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-white text-sm font-semibold">{team.name}</span>
-                        <span className="text-gray-300 text-sm">৳{(team.budget - team.spent).toLocaleString()}</span>
+                  {isAuctionActive ? (
+                    currentBids.length > 0 ? currentBids.map((bid, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <div>
+                          <div className="text-white font-semibold text-sm">{bid.team}</div>
+                          <div className="text-gray-400 text-xs">{bid.time}</div>
+                        </div>
+                        <div className={`font-bold ${bid.amount === highestBid ? 'text-green-500' : 'text-gray-400'}`}>
+                          ৳{bid.amount.toLocaleString()}
+                          {bid.amount === highestBid && <span className="ml-2 text-xs">HIGHEST</span>}
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-700 rounded-full h-2">
-                        <div 
-                          className="h-2 rounded-full bg-[#D0620D]"
-                          style={{ width: `${(team.spent / team.budget) * 100}%` }}
-                        ></div>
+                    )) : (
+                      <div className="text-center py-4">
+                        <p className="text-gray-400">No bids placed yet</p>
+                        <p className="text-gray-500 text-xs mt-1">Start the auction to begin bidding</p>
+                      </div>
+                    )
+                  ) : (
+                    bidHistory.length > 0 ? bidHistory.slice(0, 5).map((bid, index) => (
+                      <div key={index} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                        <div>
+                          <div className="text-white font-semibold text-sm">{bid.player}</div>
+                          <div className="text-gray-400 text-xs">Sold to {bid.team} • {bid.time}</div>
+                        </div>
+                        <div className="text-[#D0620D] font-bold">৳{bid.amount.toLocaleString()}</div>
+                      </div>
+                    )) : (
+                      <div className="text-center py-4">
+                        <p className="text-gray-400">No sales yet</p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Team Status */}
+              <div className="border border-gray-700 rounded-xl p-6" style={{ backgroundColor: '#0A0D13' }}>
+                <h3 className="text-xl font-bold text-white mb-4">Teams</h3>
+                <div className="space-y-3">
+                  {teams.map((team, index) => (
+                    <div key={team.id} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        {team.logo ? (
+                          <img 
+                            src={team.logo} 
+                            alt={`${team.name} logo`}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div 
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                            style={{ backgroundColor: team.color }}
+                          >
+                            {team.name.split(' ').map(word => word.charAt(0)).join('').toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-white font-semibold text-sm">{team.name}</div>
+                          <div className="text-gray-400 text-xs">Captain: {team.captain || 'Not assigned'}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-[#D0620D] font-bold text-sm">
+                          {bidHistory.filter(bid => bid.team === team.name).length} Players
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -231,6 +500,7 @@ export default function Auction() {
               </div>
             </div>
           </div>
+          )}
         </div>
       </section>
 
@@ -238,59 +508,34 @@ export default function Auction() {
       <section className="py-16" style={{ backgroundColor: '#0A0D13' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h3 className="text-3xl font-bold text-white mb-8 text-center">Upcoming Players</h3>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {upcomingPlayers.map((player, index) => (
-              <div key={index} className="border border-gray-700 rounded-xl p-6 text-center hover:border-[#D0620D] transition-all duration-300" style={{ backgroundColor: '#0A0D13' }}>
-                <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl">⚽</span>
-                </div>
-                <h4 className="text-lg font-bold text-white mb-2">{player.name}</h4>
-                <div className="space-y-2 mb-4">
-                  <p className="text-[#D0620D] font-semibold">{player.position}</p>
-                  <p className="text-gray-300 text-sm">{player.department} • {player.semester} Semester</p>
-                </div>
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-gray-400 text-xs">Base Price</p>
-                  <p className="text-[#D0620D] font-bold text-lg">৳{player.basePrice.toLocaleString()}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Recent Sales */}
-      <section className="py-16" style={{ backgroundColor: '#0A0D13' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h3 className="text-3xl font-bold text-white mb-8 text-center">Recent Sales</h3>
-          <div className="grid md:grid-cols-2 gap-6">
-            {recentSales.map((sale, index) => (
-              <div key={index} className="border border-gray-700 rounded-xl p-6 hover:border-[#D0620D] transition-all duration-300" style={{ backgroundColor: '#0A0D13' }}>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center">
-                      <span className="text-2xl">⚽</span>
-                    </div>
-                    <div>
-                      <h4 className="text-white font-bold text-lg">{sale.name}</h4>
-                      <p className="text-gray-300">{sale.position}</p>
-                      <p className="text-gray-400 text-sm">{sale.department}</p>
-                    </div>
+          {unassignedPlayers.length > 0 ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {unassignedPlayers.slice(currentPlayerIndex + 1, currentPlayerIndex + 9).map((player, index) => (
+                <div key={player.id} className="border border-gray-700 rounded-xl p-6 text-center hover:border-[#D0620D] transition-all duration-300" style={{ backgroundColor: '#0A0D13' }}>
+                  <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-3xl">
+                      {player.position === 'Goalkeeper' ? '🥅' : 
+                       player.position === 'Defender' ? '🛡️' : 
+                       player.position === 'Midfielder' ? '⚽' : '🎯'}
+                    </span>
                   </div>
-                  <div className="text-right">
-                    <div className="bg-[#D0620D] text-white px-3 py-1 rounded-full text-sm font-semibold mb-2">
-                      SOLD
-                    </div>
-                    <p className="text-[#D0620D] font-bold text-xl">৳{sale.price.toLocaleString()}</p>
+                  <h4 className="text-lg font-bold text-white mb-2">{player.name}</h4>
+                  <div className="space-y-2 mb-4">
+                    <p className="text-[#D0620D] font-semibold">{player.position}</p>
+                    <p className="text-gray-300 text-sm">{player.department} • {player.semester}</p>
+                  </div>
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-gray-400 text-xs">University ID</p>
+                    <p className="text-white font-bold text-sm">{player.uniId}</p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between pt-4 border-t border-gray-700">
-                  <span className="text-gray-400 text-sm">Purchased by:</span>
-                  <span className="text-white font-semibold">{sale.team}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <p className="text-gray-400">No more players in queue</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -300,48 +545,26 @@ export default function Auction() {
           <h3 className="text-3xl font-bold text-white mb-8 text-center">Auction Statistics</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             <div className="space-y-2">
-              <div className="text-4xl font-bold text-[#D0620D]">136</div>
+              <div className="text-4xl font-bold text-[#D0620D]">{unassignedPlayers.length + bidHistory.length}</div>
               <div className="text-gray-300">Total Players</div>
             </div>
             <div className="space-y-2">
-              <div className="text-4xl font-bold text-[#D0620D]">89</div>
-              <div className="text-gray-300">Players Sold</div>
+              <div className="text-4xl font-bold text-[#D0620D]">{bidHistory.length}</div>
+              <div className="text-gray-300">Players Assigned</div>
             </div>
             <div className="space-y-2">
-              <div className="text-4xl font-bold text-[#D0620D]">৳5,000</div>
-              <div className="text-gray-300">Highest Sale</div>
+              <div className="text-4xl font-bold text-[#D0620D]">
+                {bidHistory.length > 0 ? `৳${Math.max(...bidHistory.map(b => b.amount)).toLocaleString()}` : '৳0'}
+              </div>
+              <div className="text-gray-300">Highest Bid</div>
             </div>
             <div className="space-y-2">
-              <div className="text-4xl font-bold text-[#D0620D]">47</div>
+              <div className="text-4xl font-bold text-[#D0620D]">{unassignedPlayers.length}</div>
               <div className="text-gray-300">Remaining</div>
             </div>
           </div>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="py-12 border-t border-gray-800" style={{ backgroundColor: '#0A0D13' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between">
-            <div className="flex items-center space-x-3 mb-4 md:mb-0">
-              <Image
-                src="/assets/uiuvccuplogo.png"
-                alt="UIU VC Cup Logo"
-                width={32}
-                height={32}
-                className="rounded-full"
-              />
-              <span className="text-lg font-bold text-[#D0620D]">
-                UIU VC Cup Football Tournament
-              </span>
-            </div>
-            <div className="text-gray-400 text-center md:text-right">
-              <p>&copy; 2024 UIU VC Cup. All rights reserved.</p>
-              <p className="text-sm mt-1">Built with Next.js & Firebase</p>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

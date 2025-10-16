@@ -1,9 +1,66 @@
+'use client';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
+import { teamsService, playersService } from '../lib/firebaseService';
 
 export default function Home() {
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load teams and calculate player counts
+  useEffect(() => {
+    loadTeamsWithPlayerCounts();
+  }, []);
+
+  const loadTeamsWithPlayerCounts = async () => {
+    try {
+      setLoading(true);
+      
+      // Load teams and players in parallel
+      const [teamsData, playersData] = await Promise.all([
+        teamsService.getAll(),
+        playersService.getAll()
+      ]);
+      
+      // Calculate player count for each team
+      const teamsWithPlayerCounts = teamsData.map(team => {
+        const playerCount = playersData.filter(player => player.team === team.name).length;
+        return {
+          ...team,
+          players: playerCount
+        };
+      });
+      
+      setTeams(teamsWithPlayerCounts);
+    } catch (error) {
+      console.error('Error loading teams:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div className="min-h-screen text-white" style={{ backgroundColor: '#0A0D13' }}>
+      {/* Developer Credit Box - Fixed Top Right */}
+      <div className="fixed top-[30%] right-0 z-40 bg-white rounded-l-xl shadow-lg border border-gray-200 p-4 max-w-xs">
+        <div className="flex items-center space-x-3">
+          <div className="w-12 h-12 rounded-full overflow-hidden">
+            <Image
+              src="/assets/udhlogo.jpg"
+              alt="UDH Logo"
+              width={48}
+              height={48}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div>
+            <div className="text-black font-bold text-sm">Developed by</div>
+            <div className="text-[#D0620D] font-semibold text-sm">UDH</div>
+            <div className="text-gray-600 text-xs">Taki Tahmid</div>
+          </div>
+        </div>
+      </div>
+
       {/* Navigation */}
       <nav className="fixed top-0 w-full z-50 p-4">
         <div className="bg-white rounded-2xl shadow-lg mx-4 lg:mx-8">
@@ -111,87 +168,54 @@ export default function Home() {
                 <div className="text-orange-200 text-sm font-medium">TEAMS</div>
               </div>
 
-              {/* Teams Grid */}
-              <div className="flex-1 grid grid-cols-8 h-full">
-                {/* Team 1 - Fire Cats */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU TIGERS</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-[#D0620D] rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UT</span>
+              {/* Teams Grid - Dynamic */}
+              <div className={`flex-1 grid h-full ${teams.length > 0 ? `grid-cols-${Math.min(teams.length, 8)}` : 'grid-cols-8'}`}>
+                {loading ? (
+                  // Loading skeleton
+                  Array.from({ length: 8 }).map((_, index) => (
+                    <div key={index} className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center animate-pulse" style={{ backgroundColor: '#0A0D13' }}>
+                      <div className="bg-gray-600 h-3 w-16 mb-2 rounded"></div>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 bg-gray-600 rounded-full"></div>
+                        <div className="bg-gray-600 h-3 w-6 rounded"></div>
+                      </div>
+                      <div className="bg-gray-600 h-2 w-12 mt-2 rounded"></div>
+                    </div>
+                  ))
+                ) : teams.length > 0 ? (
+                  teams.slice(0, 8).map((team, index) => (
+                    <div 
+                      key={team.id} 
+                      className={`px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors ${index < teams.length - 1 ? 'border-r border-gray-700' : ''}`} 
+                      style={{ backgroundColor: '#0A0D13' }}
+                    >
+                      <div className="text-white text-xs font-semibold mb-1 truncate">{team.name.toUpperCase()}</div>
+                      <div className="flex items-center space-x-2">
+                        {team.logo ? (
+                          <img 
+                            src={team.logo} 
+                            alt={`${team.name} logo`}
+                            className="w-3 h-3 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: team.color }}
+                          ></div>
+                        )}
+                        <span className="text-white text-sm font-bold">
+                          {team.name.split(' ').map(word => word.charAt(0)).join('').toUpperCase()}
+                        </span>
+                      </div>
+                      <div className="text-gray-400 text-xs mt-1">{team.players} Players</div>
+                    </div>
+                  ))
+                ) : (
+                  // No teams fallback
+                  <div className="col-span-8 px-4 py-3 flex items-center justify-center" style={{ backgroundColor: '#0A0D13' }}>
+                    <div className="text-gray-400 text-sm">No teams available</div>
                   </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
-
-                {/* Team 2 - Thunder */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU EAGLES</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UE</span>
-                  </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
-
-                {/* Team 3 - Storm */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU LIONS</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UL</span>
-                  </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
-
-                {/* Team 4 - Lions */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU PANTHERS</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UP</span>
-                  </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
-
-                {/* Team 5 - Eagles */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU FALCONS</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UF</span>
-                  </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
-
-                {/* Team 6 - Tigers */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU WOLVES</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UW</span>
-                  </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
-
-                {/* Team 7 - Wolves */}
-                <div className="border-r border-gray-700 px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU HAWKS</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UH</span>
-                  </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
-
-                {/* Team 8 - Phoenix */}
-                <div className="px-4 py-3 flex flex-col justify-center hover:bg-gray-800/50 transition-colors" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="text-white text-xs font-semibold mb-1">UIU PHOENIX</div>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-3 h-3 bg-pink-500 rounded-full"></div>
-                    <span className="text-white text-sm font-bold">UX</span>
-                  </div>
-                  <div className="text-gray-400 text-xs mt-1">17 Players</div>
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -241,37 +265,58 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-4xl font-bold text-white mb-4">Tournament Teams</h2>
-            <p className="text-xl text-gray-300">8 teams competing for the championship</p>
+            <p className="text-xl text-gray-300">
+              {loading ? 'Loading teams...' : `${teams.length} teams competing for the championship`}
+            </p>
           </div>
           
           <div className="grid md:grid-cols-4 gap-6">
-            {[
-              { name: 'UIU Tigers', players: 17, budget: '৳25,000', color: '#D0620D' },
-              { name: 'UIU Eagles', players: 17, budget: '৳25,000', color: '#3B82F6' },
-              { name: 'UIU Lions', players: 17, budget: '৳25,000', color: '#10B981' },
-              { name: 'UIU Panthers', players: 17, budget: '৳25,000', color: '#EF4444' },
-              { name: 'UIU Falcons', players: 17, budget: '৳25,000', color: '#8B5CF6' },
-              { name: 'UIU Wolves', players: 17, budget: '৳25,000', color: '#F59E0B' },
-              { name: 'UIU Hawks', players: 17, budget: '৳25,000', color: '#6366F1' },
-              { name: 'UIU Phoenix', players: 17, budget: '৳25,000', color: '#EC4899' }
-            ].map((team, index) => (
-              <Link key={index} href={`/teams/${team.name.toLowerCase().replace(' ', '-')}`} className="block">
-                <div className="rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-600 hover:border-[#D0620D] cursor-pointer" style={{ backgroundColor: '#0A0D13' }}>
+            {loading ? (
+              // Loading skeleton
+              Array.from({ length: 8 }).map((_, index) => (
+                <div key={index} className="rounded-xl p-6 shadow-sm border border-gray-600 animate-pulse" style={{ backgroundColor: '#0A0D13' }}>
                   <div className="flex items-center">
-                    <div 
-                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                      style={{ backgroundColor: team.color }}
-                    >
-                      {team.name.substring(0, 2).toUpperCase()}
-                    </div>
+                    <div className="w-12 h-12 rounded-full bg-gray-600"></div>
                     <div className="ml-3">
-                      <h3 className="font-bold text-white">{team.name}</h3>
-                      <p className="text-sm text-gray-300">{team.players} Players</p>
+                      <div className="bg-gray-600 h-4 w-24 mb-2 rounded"></div>
+                      <div className="bg-gray-600 h-3 w-16 rounded"></div>
                     </div>
                   </div>
                 </div>
-              </Link>
-            ))}
+              ))
+            ) : teams.length > 0 ? (
+              teams.map((team, index) => (
+                <Link key={team.id} href={`/teams/${team.name.toLowerCase().replace(/\s+/g, '-')}`} className="block">
+                  <div className="rounded-xl p-6 shadow-sm hover:shadow-md transition-all duration-300 border border-gray-600 hover:border-[#D0620D] cursor-pointer" style={{ backgroundColor: '#0A0D13' }}>
+                    <div className="flex items-center">
+                      {team.logo ? (
+                        <img 
+                          src={team.logo} 
+                          alt={`${team.name} logo`}
+                          className="w-12 h-12 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div 
+                          className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                          style={{ backgroundColor: team.color }}
+                        >
+                          {team.name.split(' ').map(word => word.charAt(0)).join('').toUpperCase()}
+                        </div>
+                      )}
+                      <div className="ml-3">
+                        <h3 className="font-bold text-white">{team.name}</h3>
+                        <p className="text-sm text-gray-300">{team.players} Players</p>
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              // No teams fallback
+              <div className="col-span-4 text-center py-12">
+                <div className="text-gray-400">No teams available</div>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -303,29 +348,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="py-12 border-t border-gray-800" style={{ backgroundColor: '#0A0D13' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between">
-            <div className="flex items-center space-x-3 mb-4 md:mb-0">
-              <Image
-                src="/assets/uiuvccuplogo.png"
-                alt="UIU VC Cup Logo"
-                width={32}
-                height={32}
-                className="rounded-full"
-              />
-              <span className="text-lg font-bold text-[#D0620D]">
-                UIU VC Cup Football Tournament
-              </span>
-            </div>
-            <div className="text-gray-400 text-center md:text-right">
-              <p>&copy; 2024 UIU VC Cup. All rights reserved.</p>
-              <p className="text-sm mt-1">Built with Next.js & Firebase</p>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
