@@ -6,7 +6,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
 export default function TeamManagement() {
-  const { currentUser, isAdmin, loading: authLoading } = useAuth();
+  const { currentUser, isAdmin, userRole, loading: authLoading } = useAuth();
   const router = useRouter();
   const [editingTeam, setEditingTeam] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -26,13 +26,18 @@ export default function TeamManagement() {
       authLoading,
       hasUser: !!currentUser,
       userEmail: currentUser?.email,
+      userRole,
       isAdmin,
       timestamp: new Date().toISOString()
     });
     
-    // Don't redirect while auth is still loading
-    if (authLoading) {
-      console.log('⏳ TeamManagement: Still loading auth, waiting...');
+    // Don't redirect while auth is still loading OR if userRole is not set yet
+    if (authLoading || (currentUser && userRole === null)) {
+      console.log('⏳ TeamManagement: Still loading auth or role, waiting...', {
+        authLoading,
+        hasUser: !!currentUser,
+        userRole
+      });
       return;
     }
     
@@ -43,14 +48,18 @@ export default function TeamManagement() {
     }
 
     if (!isAdmin) {
-      console.log('🚫 TeamManagement: Not admin, redirecting to team dashboard');
+      console.log('🚫 TeamManagement: Not admin, redirecting to team dashboard', {
+        userRole,
+        isAdmin,
+        userEmail: currentUser?.email
+      });
       router.push('/team-dashboard'); // Redirect team owners to their dashboard
       return;
     }
 
     console.log('✅ TeamManagement: Admin access confirmed, loading teams');
     loadTeamsWithPlayerCounts();
-  }, [currentUser, isAdmin, authLoading, router]);
+  }, [currentUser, isAdmin, authLoading, router, userRole]);
 
   const loadTeamsWithPlayerCounts = async () => {
     try {
@@ -175,6 +184,10 @@ export default function TeamManagement() {
       let ownerCredentials = null;
       try {
         ownerCredentials = await userService.createTeamOwner(newTeamData.email, newTeamData.name);
+        
+        // Show success message with credentials
+        alert(`Team created successfully!\n\nTeam Owner Credentials (for future use):\nEmail: ${ownerCredentials.email}\nPassword: ${ownerCredentials.password}\n\nNote: Team owner can use these credentials to create their account later.`);
+        
       } catch (error) {
         console.error('Error creating team owner account:', error);
         alert('Failed to create team owner account. Please check if email is already in use.');
@@ -198,9 +211,6 @@ export default function TeamManagement() {
       // Add to local state with 0 players initially
       setTeams([...teams, { id: teamId, ...teamData, players: 0 }]);
       setShowAddModal(false);
-      
-      // Show success message with login credentials
-      alert(`Team added successfully!\n\nTeam Owner Login Credentials:\nEmail: ${ownerCredentials.email}\nPassword: ${ownerCredentials.password}\n\nPlease share these credentials with the team owner.`);
       
     } catch (error) {
       console.error('Error adding team:', error);
@@ -406,8 +416,27 @@ export default function TeamManagement() {
     }
   };
 
+  // Show loading screen while auth is being determined or role is being loaded
+  if (authLoading || (currentUser && userRole === null)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0A0D13' }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D0620D] mx-auto mb-4"></div>
+          <p className="text-white">
+            {authLoading ? 'Authenticating...' : 'Loading user role...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
+      {/* Debug info - remove in production */}
+      <div className="mb-4 p-3 bg-gray-800 rounded text-xs text-gray-300">
+        <strong>Debug:</strong> User: {currentUser?.email || 'None'} | Role: {userRole || 'None'} | Admin: {isAdmin ? 'Yes' : 'No'} | Loading: {authLoading ? 'Yes' : 'No'}
+      </div>
+      
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-white mb-2">Team Management</h1>
         <p className="text-gray-300">Manage tournament teams and their details</p>

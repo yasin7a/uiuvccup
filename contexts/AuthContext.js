@@ -8,11 +8,9 @@ import {
 import { auth } from '../lib/firebase';
 import { userService } from '../lib/firebaseService';
 
-// Admin email allowlist - add admin emails here
+// Admin email allowlist - hardcoded admin accounts
 const ADMIN_EMAILS = [
-  'uiuvccup@gmail.com',
-  // Add more admin emails here as needed
-  // 'another-admin@example.com',
+  'uiuvccup@gmail.com'
 ];
 
 // Check if email is in admin allowlist
@@ -32,14 +30,57 @@ export function AuthProvider({ children }) {
   const [userTeam, setUserTeam] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Login function
-  function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
-  }
+  // Login function - handles both admin (Firebase Auth) and team owners (Firestore)
+  const login = async (email, password) => {
+    try {
+      console.log('🔐 AuthContext: Attempting login for:', email);
+      
+      // Check if it's admin login (Firebase Auth)
+      if (email === 'uiuvccup@gmail.com') {
+        console.log('👑 AuthContext: Admin login via Firebase Auth');
+        const result = await signInWithEmailAndPassword(auth, email, password);
+        console.log('✅ AuthContext: Firebase admin login successful');
+        return result;
+      } else {
+        // Team owner login - check Firestore database
+        console.log('👤 AuthContext: Team owner login via Firestore');
+        const userData = await userService.loginTeamOwner(email, password);
+        
+        if (userData) {
+          // Set team owner data manually (no Firebase Auth)
+          setCurrentUser({ email: userData.email, uid: userData.uid });
+          setUserRole(userData.role);
+          setUserTeam(userData.teamName);
+          setLoading(false);
+          
+          console.log('✅ AuthContext: Team owner login successful', {
+            email: userData.email,
+            team: userData.teamName
+          });
+          
+          return { user: { email: userData.email, uid: userData.uid } };
+        } else {
+          throw new Error('Invalid team owner credentials');
+        }
+      }
+    } catch (error) {
+      console.error('❌ AuthContext: Login error:', error);
+      throw error;
+    }
+  };
 
-  // Logout function
+  // Logout function - handles both admin and team owners
   function logout() {
-    return signOut(auth);
+    // Clear team owner state if it's a team owner
+    if (userRole === 'team_owner') {
+      setCurrentUser(null);
+      setUserRole(null);
+      setUserTeam(null);
+      return Promise.resolve();
+    } else {
+      // Admin logout via Firebase Auth
+      return signOut(auth);
+    }
   }
 
   useEffect(() => {
@@ -50,54 +91,26 @@ export function AuthProvider({ children }) {
         timestamp: new Date().toISOString()
       });
       
-      setCurrentUser(user);
-      
       if (user) {
-        // Keep loading true while fetching user data
-        setLoading(true);
+        console.log('👤 AuthContext: Firebase Auth user found (Admin only)');
+        setCurrentUser(user);
         
-        // Check if user is admin by email allowlist
-        if (isAdminEmail(user.email)) {
-          console.log('👑 AuthContext: Admin email detected:', user.email);
+        // Only admin should be in Firebase Auth
+        if (user.email === 'uiuvccup@gmail.com') {
+          console.log('👑 AuthContext: Admin detected:', user.email);
           setUserRole('admin');
           setUserTeam(null);
           setLoading(false);
           console.log('🏁 AuthContext: Admin loading complete');
-          return;
-        }
-        
-        try {
-          console.log('👤 AuthContext: Fetching user data for team owner:', user.uid);
-          // Fetch user role and team info for team owners
-          const userData = await userService.getByUid(user.uid);
-          console.log('📊 AuthContext: User data received', userData);
-          
-          if (userData && userData.role === 'team_owner') {
-            setUserRole(userData.role);
-            setUserTeam(userData.teamName);
-            console.log('✅ AuthContext: Team owner role set, Team:', userData.teamName);
-          } else {
-            // Not admin and no team owner data - unauthorized user
-            console.log('❌ AuthContext: Unauthorized user - not admin and no team owner data');
-            setUserRole(null);
-            setUserTeam(null);
-          }
-          
-          // Only set loading false after role is determined
-          setLoading(false);
-          console.log('🏁 AuthContext: Loading complete', {
-            hasUser: !!user,
-            role: userData?.role || null,
-            loading: false
-          });
-        } catch (error) {
-          console.error('❌ AuthContext: Error fetching user data:', error);
+        } else {
+          console.log('❌ AuthContext: Unknown Firebase Auth user:', user.email);
           setUserRole(null);
           setUserTeam(null);
           setLoading(false);
         }
       } else {
-        console.log('🚫 AuthContext: No user, clearing role and team');
+        console.log('🚫 AuthContext: No user, clearing all state');
+        setCurrentUser(null);
         setUserRole(null);
         setUserTeam(null);
         setLoading(false);

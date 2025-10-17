@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { teamsService, playersService } from '../../lib/firebaseService';
 import { useAuth } from '../../contexts/AuthContext';
+import Navbar from '../../components/Navbar';
 
 export default function Auction() {
   const { currentUser, isAdmin } = useAuth();
@@ -196,6 +197,7 @@ export default function Auction() {
 
   return (
     <div className="min-h-screen text-white" style={{ backgroundColor: '#0A0D13' }}>
+      <Navbar />
       {/* Header */}
       <section className="pt-32 pb-16" style={{ backgroundColor: '#0A0D13' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

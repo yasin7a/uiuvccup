@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -10,8 +10,27 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, currentUser, isAdmin, isTeamOwner, loading: authLoading } = useAuth();
   const router = useRouter();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && currentUser) {
+      console.log('🔄 Login: User already logged in, redirecting...', {
+        isAdmin,
+        isTeamOwner,
+        email: currentUser.email
+      });
+      
+      if (isAdmin) {
+        router.push('/dashboard/team');
+      } else if (isTeamOwner) {
+        router.push('/team-dashboard');
+      } else {
+        router.push('/');
+      }
+    }
+  }, [currentUser, isAdmin, isTeamOwner, authLoading, router]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -20,14 +39,35 @@ export default function Login() {
       setError('');
       setLoading(true);
       await login(email, password);
-      router.push('/dashboard/team'); // Redirect to dashboard after successful login
+      
+      // Wait a moment for auth context to update, then redirect based on role
+      setTimeout(() => {
+        if (email === 'uiuvccup@gmail.com') {
+          router.push('/dashboard/team');
+        } else {
+          router.push('/team-dashboard');
+        }
+      }, 1000);
+      
     } catch (error) {
       setError('Failed to log in. Please check your credentials.');
       console.error('Login error:', error);
+      setLoading(false);
     }
-
-    setLoading(false);
   }
+
+  // Show loading while checking auth state
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D0620D] mx-auto mb-4"></div>
+          <p className="text-white">Checking authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center">
       {/* Background Pattern */}
