@@ -127,13 +127,12 @@ export default function TeamManagement() {
         logoUrl = await uploadLogo(logoFile);
       }
       
-      // Create updated team data
+      // Create updated team data (only name and logo can be updated)
       const updatedTeam = {
         ...editingTeam,
         name: updatedTeamData.name,
-        captain: updatedTeamData.captain,
         logo: logoUrl
-        // Keep existing color unchanged
+        // Captain and other fields remain unchanged
       };
       
       // Update in Firebase
@@ -197,7 +196,7 @@ export default function TeamManagement() {
       // Create team data (without players count - will be calculated)
       const teamData = {
         name: newTeamData.name,
-        captain: newTeamData.captain,
+        captain: '', // Will be set later when captain is selected
         email: newTeamData.email,
         ownerId: ownerCredentials.uid,
         generatedPassword: ownerCredentials.password,
@@ -289,8 +288,8 @@ export default function TeamManagement() {
           const lines = csv.split('\n');
           const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
           
-          // Expected headers: name, captain (optional: logo)
-          const requiredHeaders = ['name', 'captain'];
+          // Expected headers: name (optional: captain, logo)
+          const requiredHeaders = ['name'];
           const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
           
           if (missingHeaders.length > 0) {
@@ -311,13 +310,13 @@ export default function TeamManagement() {
             });
             
             // Validate required fields
-            if (!teamData.name || !teamData.captain) {
+            if (!teamData.name) {
               continue; // Skip invalid rows
             }
             
             teams.push({
               name: teamData.name,
-              captain: teamData.captain,
+              captain: teamData.captain || '', // Optional captain from CSV
               color: '#D0620D', // Fixed default color
               logo: teamData.logo || null
             });
@@ -616,8 +615,7 @@ export default function TeamManagement() {
               const logoFile = formData.get('logo');
               
               const teamData = {
-                name: formData.get('name'),
-                captain: formData.get('captain')
+                name: formData.get('name')
               };
               
               // Pass both team data and logo file
@@ -665,16 +663,6 @@ export default function TeamManagement() {
                   <p className="mt-1 text-xs text-gray-500">Optional: Upload a new logo to replace the current one</p>
                 </div>
                 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Captain Name</label>
-                  <input
-                    type="text"
-                    name="captain"
-                    defaultValue={editingTeam.captain}
-                    required
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
-                  />
-                </div>
                 
                 
                 <div className="bg-gray-50 p-3 rounded-lg">
@@ -748,16 +736,6 @@ export default function TeamManagement() {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D] file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-[#D0620D] file:text-white hover:file:bg-[#B8540B]"
                   />
                   <p className="mt-1 text-xs text-gray-500">Optional: Upload a logo image (JPG, PNG, etc.)</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Captain Name</label>
-                  <input
-                    type="text"
-                    name="captain"
-                    required
-                    placeholder="e.g., Abdullah Rahman"
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
-                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Team Owner Email</label>

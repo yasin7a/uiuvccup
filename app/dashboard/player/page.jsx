@@ -14,6 +14,9 @@ export default function PlayerManagement() {
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [csvUploading, setCsvUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [showRandomAssignModal, setShowRandomAssignModal] = useState(false);
+  const [selectedCategoryForAssign, setSelectedCategoryForAssign] = useState('');
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
 
   // Load players and teams from Firebase
   useEffect(() => {
@@ -112,6 +115,16 @@ export default function PlayerManagement() {
     return colors[position] || 'bg-gray-100 text-gray-800';
   };
 
+  const getCategoryColor = (category) => {
+    const colors = {
+      'A': 'bg-purple-100 text-purple-800',
+      'B': 'bg-indigo-100 text-indigo-800',
+      'C': 'bg-orange-100 text-orange-800',
+      'D': 'bg-pink-100 text-pink-800'
+    };
+    return colors[category] || 'bg-gray-100 text-gray-800';
+  };
+
   // CSV file processing function for players
   const processCsvFile = (file) => {
     return new Promise((resolve, reject) => {
@@ -122,7 +135,7 @@ export default function PlayerManagement() {
           const lines = csv.split('\n');
           const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
           
-          // Expected headers: name, uniId, semester, department, age, position, phone, email (optional: team)
+          // Expected headers: name, uniId, semester, department, age, position, phone, email (optional: team, category)
           const requiredHeaders = ['name', 'uniid', 'semester', 'department', 'age', 'position', 'phone', 'email'];
           const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
           
@@ -157,6 +170,7 @@ export default function PlayerManagement() {
               department: playerData.department,
               age: parseInt(playerData.age),
               position: playerData.position,
+              category: playerData.category || '', // Optional category from CSV
               phone: playerData.phone,
               email: playerData.email,
               team: playerData.team || null
@@ -255,6 +269,95 @@ export default function PlayerManagement() {
     }
   };
 
+  // Random assignment function
+  const handleRandomAssignment = async () => {
+    if (!selectedCategoryForAssign) {
+      alert('Please select a category first.');
+      return;
+    }
+
+    try {
+      setAssignmentLoading(true);
+
+      // Get unassigned players from selected category
+      const unassignedPlayers = players.filter(player => 
+        !player.team && player.category === selectedCategoryForAssign
+      );
+
+      if (unassignedPlayers.length === 0) {
+        alert(`No unassigned players found in Category ${selectedCategoryForAssign}.`);
+        return;
+      }
+
+      // Get all available team names
+      const teamNames = teams.map(team => team.name);
+      
+      if (teamNames.length === 0) {
+        alert(`No teams available for assignment.`);
+        return;
+      }
+
+      // Shuffle the unassigned players randomly
+      const shuffledPlayers = [...unassignedPlayers].sort(() => Math.random() - 0.5);
+      
+      // Policy: Maximum 6 players per team from each category
+      // Calculate max players we can assign (6 per team × number of teams)
+      const maxPlayersToAssign = teamNames.length * 6;
+      const playersToAssign = shuffledPlayers.slice(0, maxPlayersToAssign);
+
+      // Assign exactly 6 players per team (policy enforcement)
+      const assignments = [];
+      for (let i = 0; i < playersToAssign.length; i++) {
+        const teamIndex = Math.floor(i / 6); // 6 players per team
+        const player = playersToAssign[i];
+        const teamName = teamNames[teamIndex];
+        
+        assignments.push({
+          playerId: player.id,
+          teamName: teamName,
+          playerName: player.name
+        });
+      }
+
+      // Execute assignments
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const assignment of assignments) {
+        try {
+          await playersService.assignToTeam(assignment.playerId, assignment.teamName);
+          successCount++;
+        } catch (error) {
+          console.error(`Error assigning ${assignment.playerName} to ${assignment.teamName}:`, error);
+          errorCount++;
+        }
+      }
+
+      // Update local state
+      setPlayers(prevPlayers => 
+        prevPlayers.map(player => {
+          const assignment = assignments.find(a => a.playerId === player.id);
+          return assignment ? { ...player, team: assignment.teamName } : player;
+        })
+      );
+
+      // Close modal and show results
+      setShowRandomAssignModal(false);
+      setSelectedCategoryForAssign('');
+      
+      const totalUnassigned = unassignedPlayers.length;
+      const remainingUnassigned = totalUnassigned - successCount;
+      
+      alert(`Random assignment completed!\nSuccess: ${successCount} players assigned\nErrors: ${errorCount} players\nRemaining unassigned: ${remainingUnassigned} players\n\nCategory ${selectedCategoryForAssign}: Exactly 6 players assigned per team across ${teamNames.length} teams.\n\nPolicy: Maximum 6 players per team from each category.`);
+
+    } catch (error) {
+      console.error('Error during random assignment:', error);
+      alert('Failed to complete random assignment. Please try again.');
+    } finally {
+      setAssignmentLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="mb-6 flex justify-between items-center">
@@ -263,6 +366,13 @@ export default function PlayerManagement() {
           <p className="text-gray-300">Manage players and assign them to teams</p>
         </div>
         <div className="flex space-x-3">
+          <button 
+            onClick={() => setShowRandomAssignModal(true)}
+            disabled={assignmentLoading}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            🎲 Random Assign
+          </button>
           <button 
             onClick={() => setShowCsvModal(true)}
             disabled={csvUploading}
@@ -331,13 +441,10 @@ export default function PlayerManagement() {
                 Position
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Department
+                Category
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Age
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Contact
+                Details
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Current Team
@@ -380,14 +487,14 @@ export default function PlayerManagement() {
                       {player.position}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {player.department}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {player.age}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCategoryColor(player.category)}`}>
+                      Category {player.category || 'N/A'}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     <div>
+                      <div className="text-sm font-medium text-gray-900">{player.department} • Age {player.age}</div>
                       <div className="text-sm text-gray-900">{player.phone}</div>
                       <div className="text-sm text-gray-500">{player.email}</div>
                     </div>
@@ -470,6 +577,7 @@ export default function PlayerManagement() {
                 department: formData.get('department'),
                 age: parseInt(formData.get('age')),
                 position: formData.get('position'),
+                category: formData.get('category'),
                 phone: formData.get('phone'),
                 email: formData.get('email'),
                 team: formData.get('team') || null
@@ -523,6 +631,16 @@ export default function PlayerManagement() {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Performance Category</label>
+                  <select name="category" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
+                    <option value="">Select Category</option>
+                    <option value="A">Category A</option>
+                    <option value="B">Category B</option>
+                    <option value="C">Category C</option>
+                    <option value="D">Category D</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Phone</label>
                   <input type="tel" name="phone" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
                 </div>
@@ -564,6 +682,7 @@ export default function PlayerManagement() {
                 department: formData.get('department'),
                 age: parseInt(formData.get('age')),
                 position: formData.get('position'),
+                category: formData.get('category'),
                 phone: formData.get('phone'),
                 email: formData.get('email'),
                 team: formData.get('team') || null
@@ -652,6 +771,21 @@ export default function PlayerManagement() {
                   </select>
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Performance Category</label>
+                  <select 
+                    name="category" 
+                    defaultValue={editingPlayer.category || ''}
+                    required 
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
+                  >
+                    <option value="">Select Category</option>
+                    <option value="A">Category A</option>
+                    <option value="B">Category B</option>
+                    <option value="C">Category C</option>
+                    <option value="D">Category D</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Phone</label>
                   <input 
                     type="tel" 
@@ -717,6 +851,7 @@ export default function PlayerManagement() {
               <div><strong>Department:</strong> {viewingPlayer.department}</div>
               <div><strong>Age:</strong> {viewingPlayer.age}</div>
               <div><strong>Position:</strong> {viewingPlayer.position}</div>
+              <div><strong>Performance Category:</strong> {viewingPlayer.category || 'Not assigned'}</div>
               <div><strong>Phone:</strong> {viewingPlayer.phone}</div>
               <div><strong>Email:</strong> {viewingPlayer.email}</div>
               <div><strong>Current Team:</strong> {viewingPlayer.team || 'Unassigned'}</div>
@@ -822,7 +957,7 @@ export default function PlayerManagement() {
                 type="button"
                 onClick={() => {
                   // Download sample CSV
-                  const csvContent = "name,uniId,semester,department,age,position,phone,email,team\nJohn Doe,UIU-2021-001,5th,CSE,22,Forward,01712345678,john@example.com,UIU Tigers\nJane Smith,UIU-2021-002,6th,EEE,23,Midfielder,01798765432,jane@example.com,\nMike Johnson,UIU-2021-003,7th,BBA,24,Defender,01687654321,mike@example.com,UIU Eagles";
+                  const csvContent = "name,uniId,semester,department,age,position,category,phone,email,team\nJohn Doe,UIU-2021-001,5th,CSE,22,Forward,A,01712345678,john@example.com,UIU Tigers\nJane Smith,UIU-2021-002,6th,EEE,23,Midfielder,B,01798765432,jane@example.com,\nMike Johnson,UIU-2021-003,7th,BBA,24,Defender,C,01687654321,mike@example.com,UIU Eagles";
                   const blob = new Blob([csvContent], { type: 'text/csv' });
                   const url = window.URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -834,6 +969,120 @@ export default function PlayerManagement() {
                 className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200"
               >
                 📥 Download Sample
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Random Assignment Modal */}
+      {showRandomAssignModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Random Player Assignment</h3>
+            
+            <div className="mb-6">
+              <p className="text-sm text-gray-600 mb-4">
+                This will randomly assign <strong>maximum 6 players per team</strong> from the selected category across all available teams.
+              </p>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-blue-700">
+                      <strong>Policy:</strong> Each team gets exactly 6 players from each category. If more players are available, they remain unassigned for future use.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-yellow-700">
+                      <strong>Warning:</strong> This action cannot be undone. Players will be distributed evenly across available teams.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Category to Assign
+                </label>
+                <select
+                  value={selectedCategoryForAssign}
+                  onChange={(e) => setSelectedCategoryForAssign(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
+                >
+                  <option value="">Choose a category...</option>
+                  <option value="A">Category A</option>
+                  <option value="B">Category B</option>
+                  <option value="C">Category C</option>
+                  <option value="D">Category D</option>
+                </select>
+              </div>
+
+              {selectedCategoryForAssign && (
+                <div className="mt-3 text-sm text-gray-600">
+                  {(() => {
+                    const unassignedCount = players.filter(p => !p.team && p.category === selectedCategoryForAssign).length;
+                    const maxAssignable = teams.length * 6;
+                    const willAssign = Math.min(unassignedCount, maxAssignable);
+                    const willRemain = unassignedCount - willAssign;
+                    
+                    return (
+                      <>
+                        <p>
+                          <strong>Unassigned players in Category {selectedCategoryForAssign}:</strong> {unassignedCount}
+                        </p>
+                        <p>
+                          <strong>Available teams:</strong> {teams.length}
+                        </p>
+                        <p>
+                          <strong>Will assign:</strong> {willAssign} players (6 per team)
+                        </p>
+                        {willRemain > 0 && (
+                          <p className="text-orange-600">
+                            <strong>Will remain unassigned:</strong> {willRemain} players
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRandomAssignModal(false);
+                  setSelectedCategoryForAssign('');
+                }}
+                disabled={assignmentLoading}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRandomAssignment}
+                disabled={assignmentLoading || !selectedCategoryForAssign}
+                className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-md hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {assignmentLoading ? 'Assigning...' : '🎲 Start Random Assignment'}
               </button>
             </div>
           </div>
