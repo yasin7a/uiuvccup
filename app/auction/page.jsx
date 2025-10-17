@@ -3,8 +3,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { teamsService, playersService } from '../../lib/firebaseService';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Auction() {
+  const { currentUser, isAdmin } = useAuth();
   const [teams, setTeams] = useState([]);
   const [unassignedPlayers, setUnassignedPlayers] = useState([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
@@ -40,6 +42,10 @@ export default function Auction() {
 
   // Start auction for current player
   const startAuction = () => {
+    if (!currentUser || !isAdmin) {
+      alert('Only administrators can start the auction. Please log in as admin.');
+      return;
+    }
     setIsAuctionActive(true);
     setAuctionTimer(30);
     setCurrentBids([]);
@@ -146,6 +152,10 @@ export default function Auction() {
   const currentPlayer = unassignedPlayers[currentPlayerIndex];
 
   const handlePlaceBid = () => {
+    if (!currentUser || !isAdmin) {
+      alert('Only administrators can place bids. Please log in as admin.');
+      return;
+    }
     if (!bidAmount || !selectedTeam || !currentPlayer || !isAuctionActive) return;
     
     const bidAmountNum = parseInt(bidAmount);
@@ -186,41 +196,6 @@ export default function Auction() {
 
   return (
     <div className="min-h-screen text-white" style={{ backgroundColor: '#0A0D13' }}>
-      {/* Navigation */}
-      <nav className="fixed top-0 w-full z-50 p-4">
-        <div className="bg-white rounded-2xl shadow-lg mx-4 lg:mx-8">
-          <div className="max-w-7xl mx-auto px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center space-x-3">
-                <Image
-                  src="/assets/uiuvccuplogo.png"
-                  alt="UIU VC Cup Logo"
-                  width={40}
-                  height={40}
-                  className="rounded-full"
-                />
-                <span className="text-xl font-bold text-black">
-                  UIU VC Cup
-                </span>
-              </div>
-              <div className="hidden md:flex items-center space-x-8">
-                <Link href="/" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">HOME</Link>
-                <Link href="/teams" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">TEAMS</Link>
-                <Link href="/auction" className="text-[#D0620D] font-medium">AUCTION</Link>
-                <Link href="/about" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">ABOUT</Link>
-                <Link href="/blog" className="text-gray-700 hover:text-[#D0620D] transition-colors font-medium">BLOG</Link>
-                <Link 
-                  href="/login" 
-                  className="bg-[#D0620D] px-6 py-2 rounded-full text-white font-medium hover:bg-[#B8540B] transition-all duration-300"
-                >
-                  LOGIN
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </nav>
-
       {/* Header */}
       <section className="pt-32 pb-16" style={{ backgroundColor: '#0A0D13' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -304,6 +279,12 @@ export default function Auction() {
                     </div>
                   </div>
 
+                  {(!currentUser || !isAdmin) && (
+                    <div className="mb-6 p-4 border border-yellow-600 bg-yellow-900 rounded-lg text-yellow-200 text-sm">
+                      Only administrators can start auctions and place bids. Please log in as admin.
+                    </div>
+                  )}
+
                   <div className="grid md:grid-cols-2 gap-8">
                     <div>
                       <div className="w-64 h-64 bg-gray-800 rounded-2xl flex items-center justify-center border border-gray-700 mx-auto mb-6">
@@ -351,7 +332,7 @@ export default function Auction() {
                             onClick={startAuction}
                             className="w-full bg-green-600 text-white px-6 py-4 rounded-lg font-semibold hover:bg-green-700 transition-colors text-lg"
                           >
-                            Start Auction for {currentPlayer.name}
+                            {!currentUser || !isAdmin ? 'Admin access required to start auction' : `Start Auction for ${currentPlayer.name}`}
                           </button>
                         ) : (
                           <>
@@ -362,11 +343,12 @@ export default function Auction() {
                                 {teams.map((team) => (
                                   <button
                                     key={team.id}
-                                    onClick={() => setSelectedTeam(team.name)}
+                                    onClick={() => (currentUser && isAdmin) && setSelectedTeam(team.name)}
+                                    disabled={!currentUser || !isAdmin}
                                     className={`p-3 rounded-lg border text-sm font-medium transition-colors ${
-                                      selectedTeam === team.name
+                                      selectedTeam === team.name && currentUser && isAdmin
                                         ? 'border-[#D0620D] bg-[#D0620D] text-white'
-                                        : 'border-gray-600 text-gray-300 hover:border-gray-500'
+                                        : 'border-gray-600 text-gray-300 ' + (currentUser && isAdmin ? 'hover:border-gray-500' : 'opacity-50 cursor-not-allowed')
                                     }`}
                                   >
                                     {team.name}
@@ -386,12 +368,13 @@ export default function Auction() {
                                     value={bidAmount}
                                     onChange={(e) => setBidAmount(e.target.value)}
                                     min={highestBid + 100}
-                                    className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:border-[#D0620D] focus:outline-none"
+                                    disabled={!currentUser || !isAdmin}
+                                    className={`w-full px-4 py-3 rounded-lg bg-gray-800 border text-white placeholder-gray-400 focus:border-[#D0620D] focus:outline-none ${!currentUser || !isAdmin ? 'border-gray-700 opacity-50 cursor-not-allowed' : 'border-gray-600'}`}
                                   />
                                 </div>
                                 <button 
                                   onClick={handlePlaceBid}
-                                  disabled={!bidAmount || !selectedTeam || parseInt(bidAmount) <= highestBid}
+                                  disabled={!currentUser || !isAdmin || !bidAmount || !selectedTeam || parseInt(bidAmount) <= highestBid}
                                   className="bg-[#D0620D] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#B8540B] transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
                                 >
                                   Place Bid

@@ -1,9 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { teamsService, playersService } from '../../../lib/firebaseService';
+import { teamsService, playersService, userService } from '../../../lib/firebaseService';
 import { uploadToCloudinary } from '../../../lib/cloudinary';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
 export default function TeamManagement() {
+  const { currentUser, isAdmin, loading: authLoading } = useAuth();
+  const router = useRouter();
   const [editingTeam, setEditingTeam] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [teams, setTeams] = useState([]);
@@ -14,11 +18,39 @@ export default function TeamManagement() {
   const [csvUploading, setCsvUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [visiblePasswords, setVisiblePasswords] = useState({});
 
-  // Load teams and calculate player counts
+  // Check authentication and load teams
   useEffect(() => {
+    console.log('🛡️ TeamManagement: Auth check', {
+      authLoading,
+      hasUser: !!currentUser,
+      userEmail: currentUser?.email,
+      isAdmin,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Don't redirect while auth is still loading
+    if (authLoading) {
+      console.log('⏳ TeamManagement: Still loading auth, waiting...');
+      return;
+    }
+    
+    if (!currentUser) {
+      console.log('🚫 TeamManagement: No user, redirecting to login');
+      router.push('/login');
+      return;
+    }
+
+    if (!isAdmin) {
+      console.log('🚫 TeamManagement: Not admin, redirecting to team dashboard');
+      router.push('/team-dashboard'); // Redirect team owners to their dashboard
+      return;
+    }
+
+    console.log('✅ TeamManagement: Admin access confirmed, loading teams');
     loadTeamsWithPlayerCounts();
-  }, []);
+  }, [currentUser, isAdmin, authLoading, router]);
 
   const loadTeamsWithPlayerCounts = async () => {
     try {
@@ -50,7 +82,15 @@ export default function TeamManagement() {
   };
 
   const handleEditTeam = (team) => {
-    setEditingTeam(team);
+    setDeleteConfirm(null);
+  };
+
+  // Toggle password visibility
+  const togglePasswordVisibility = (teamId) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [teamId]: !prev[teamId]
+    }));
   };
 
   const handleCaptainChange = async (teamId, captainName) => {
@@ -131,10 +171,23 @@ export default function TeamManagement() {
         logoUrl = await uploadLogo(logoFile);
       }
       
+      // Create team owner account
+      let ownerCredentials = null;
+      try {
+        ownerCredentials = await userService.createTeamOwner(newTeamData.email, newTeamData.name);
+      } catch (error) {
+        console.error('Error creating team owner account:', error);
+        alert('Failed to create team owner account. Please check if email is already in use.');
+        return;
+      }
+      
       // Create team data (without players count - will be calculated)
       const teamData = {
         name: newTeamData.name,
         captain: newTeamData.captain,
+        email: newTeamData.email,
+        ownerId: ownerCredentials.uid,
+        generatedPassword: ownerCredentials.password,
         logo: logoUrl,
         color: '#D0620D'
       };
@@ -145,7 +198,9 @@ export default function TeamManagement() {
       // Add to local state with 0 players initially
       setTeams([...teams, { id: teamId, ...teamData, players: 0 }]);
       setShowAddModal(false);
-      alert('Team added successfully!');
+      
+      // Show success message with login credentials
+      alert(`Team added successfully!\n\nTeam Owner Login Credentials:\nEmail: ${ownerCredentials.email}\nPassword: ${ownerCredentials.password}\n\nPlease share these credentials with the team owner.`);
       
     } catch (error) {
       console.error('Error adding team:', error);
@@ -391,6 +446,12 @@ export default function TeamManagement() {
                 Captain
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Email
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Password
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Players
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -401,7 +462,7 @@ export default function TeamManagement() {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan="4" className="px-6 py-12 text-center">
+                <td colSpan="6" className="px-6 py-12 text-center">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D0620D] mr-3"></div>
                     <span className="text-gray-500">Loading teams...</span>
@@ -410,7 +471,7 @@ export default function TeamManagement() {
               </tr>
             ) : teams.length === 0 ? (
               <tr>
-                <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                   No teams found. Add your first team to get started.
                 </td>
               </tr>
@@ -461,6 +522,35 @@ export default function TeamManagement() {
                       </select>
                     );
                   })()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {team.email || <span className="text-gray-400 italic">No email</span>}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-mono">
+                      {visiblePasswords[team.id] ? 
+                        (team.generatedPassword || 'No password stored') : 
+                        '••••••••'
+                      }
+                    </span>
+                    <button
+                      onClick={() => togglePasswordVisibility(team.id)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                      title={visiblePasswords[team.id] ? 'Hide password' : 'Show password'}
+                    >
+                      {visiblePasswords[team.id] ? (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {team.players}
@@ -559,7 +649,7 @@ export default function TeamManagement() {
                 
                 
                 <div className="bg-gray-50 p-3 rounded-lg">
-                  <div className="text-sm text-gray-600">
+                  <div>
                     <strong>Current Players:</strong> {editingTeam.players}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
@@ -602,7 +692,8 @@ export default function TeamManagement() {
               
               const teamData = {
                 name: formData.get('name'),
-                captain: formData.get('captain')
+                captain: formData.get('captain'),
+                email: formData.get('email')
               };
               
               // Pass both team data and logo file
@@ -638,6 +729,17 @@ export default function TeamManagement() {
                     placeholder="e.g., Abdullah Rahman"
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Team Owner Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    placeholder="e.g., owner@example.com"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">A login account will be created for the team owner</p>
                 </div>
               </div>
               <div className="mt-6 flex justify-end space-x-3">
@@ -717,17 +819,7 @@ export default function TeamManagement() {
                     <div className="text-lg font-medium text-gray-900">
                       {csvUploading 
                         ? 'Processing CSV...' 
-                        : dragOver 
-                          ? 'Drop CSV file here' 
-                          : 'Click to upload or drag & drop CSV file'
-                      }
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {csvUploading 
-                        ? 'Please wait while we create your teams' 
-                        : dragOver 
-                          ? 'Release to upload the file'
-                          : 'Select a CSV file with team data or drag it here'
+                        : 'Drop CSV file here or click to browse'
                       }
                     </div>
                   </div>
@@ -741,6 +833,15 @@ export default function TeamManagement() {
                 </div>
               )}
             </div>
+
+            {authLoading && (
+              <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#0A0D13' }}>
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D0620D] mx-auto mb-4"></div>
+                  <p className="text-white">Loading...</p>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end space-x-3">
               <button
