@@ -22,6 +22,7 @@ export default function Auction() {
   const [isAuctionActive, setIsAuctionActive] = useState(false);
   const [showAssignmentResult, setShowAssignmentResult] = useState(false);
   const [assignmentResult, setAssignmentResult] = useState(null);
+  const [isTimeExpired, setIsTimeExpired] = useState(false);
 
   useEffect(() => {
     loadAuctionData();
@@ -35,8 +36,8 @@ export default function Auction() {
         setAuctionTimer(prev => prev - 1);
       }, 1000);
     } else if (auctionTimer === 0 && isAuctionActive) {
-      // Time's up - assign player to highest bidder
-      assignPlayerToWinner();
+      // Time's up - mark as expired but don't auto-assign
+      setIsTimeExpired(true);
     }
     return () => clearInterval(interval);
   }, [isAuctionActive, auctionTimer]);
@@ -52,10 +53,11 @@ export default function Auction() {
     setCurrentBids([]);
     setHighestBid(0);
     setHighestBidder('');
+    setIsTimeExpired(false);
   };
 
-  // Assign player to highest bidder when timer ends
-  const assignPlayerToWinner = async () => {
+  // Confirm and assign player to highest bidder (manual confirmation)
+  const confirmPlayerAssignment = async () => {
     if (!currentPlayer || !highestBidder) {
       // No bids, show skipped message and move to next player
       setAssignmentResult({
@@ -123,6 +125,7 @@ export default function Auction() {
     setBidAmount('');
     setSelectedTeam('');
     setAuctionTimer(30);
+    setIsTimeExpired(false);
     
     // Don't increment currentPlayerIndex since we removed the current player from array
     // The next player will automatically be at the same index
@@ -183,8 +186,8 @@ export default function Auction() {
     setBidAmount('');
     setSelectedTeam('');
     
-    // Extend timer by 5 seconds if less than 10 seconds left
-    if (auctionTimer < 10) {
+    // Extend timer by 5 seconds if less than 10 seconds left (but not if already expired)
+    if (auctionTimer < 10 && auctionTimer > 0) {
       setAuctionTimer(prev => Math.min(prev + 5, 30));
     }
   };
@@ -272,11 +275,11 @@ export default function Auction() {
                       <span className="text-[#D0620D] text-sm font-medium uppercase tracking-wider">Live Auction</span>
                     </div>
                     <div className="text-right">
-                      <div className={`text-3xl font-bold ${auctionTimer <= 10 ? 'text-red-500 animate-pulse' : 'text-[#D0620D]'}`}>
-                        {isAuctionActive ? `${auctionTimer}s` : `${currentPlayerIndex + 1}/${unassignedPlayers.length}`}
+                      <div className={`text-3xl font-bold ${auctionTimer <= 10 && !isTimeExpired ? 'text-red-500 animate-pulse' : isTimeExpired ? 'text-yellow-500' : 'text-[#D0620D]'}`}>
+                        {isAuctionActive ? (isTimeExpired ? 'EXPIRED' : `${auctionTimer}s`) : `${currentPlayerIndex + 1}/${unassignedPlayers.length}`}
                       </div>
                       <div className="text-gray-300 text-sm">
-                        {isAuctionActive ? 'Time Left' : 'Player Progress'}
+                        {isAuctionActive ? (isTimeExpired ? 'Bidding continues' : 'Time Left') : 'Player Progress'}
                       </div>
                     </div>
                   </div>
@@ -284,6 +287,16 @@ export default function Auction() {
                   {(!currentUser || !isAdmin) && (
                     <div className="mb-6 p-4 border border-yellow-600 bg-yellow-900 rounded-lg text-yellow-200 text-sm">
                       Only administrators can start auctions and place bids. Please log in as admin.
+                    </div>
+                  )}
+
+                  {/* Time Expired Notice */}
+                  {isTimeExpired && isAuctionActive && (
+                    <div className="mb-6 p-4 border border-yellow-600 bg-yellow-900 rounded-lg text-yellow-200 text-sm">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-yellow-400">⏰</span>
+                        <span><strong>Time Expired!</strong> Bidding can continue. Click "Confirm Assignment" to finalize the sale.</span>
+                      </div>
                     </div>
                   )}
 
@@ -390,6 +403,17 @@ export default function Auction() {
                         )}
                         
                         <div className="flex gap-3">
+                          {/* Confirm Assignment Button - Only show when auction is active and there are bids */}
+                          {isAuctionActive && highestBid > 0 && (
+                            <button 
+                              onClick={confirmPlayerAssignment}
+                              disabled={!currentUser || !isAdmin}
+                              className="bg-green-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isTimeExpired ? '⏰ Confirm Assignment' : 'Confirm Assignment'}
+                            </button>
+                          )}
+                          
                           <button 
                             onClick={skipPlayer}
                             disabled={isAuctionActive}

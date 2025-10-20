@@ -17,6 +17,15 @@ export default function PlayerManagement() {
   const [showRandomAssignModal, setShowRandomAssignModal] = useState(false);
   const [selectedCategoryForAssign, setSelectedCategoryForAssign] = useState('');
   const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // Show toast message
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  };
 
   // Load players and teams from Firebase
   useEffect(() => {
@@ -46,9 +55,19 @@ export default function PlayerManagement() {
       setPlayers(players.map(player => 
         player.id === playerId ? { ...player, team: teamName || null } : player
       ));
+      
+      // Find player name for toast message
+      const player = players.find(p => p.id === playerId);
+      const playerName = player ? player.name : 'Player';
+      
+      if (teamName) {
+        showToast(`${playerName} successfully assigned to ${teamName}!`, 'success');
+      } else {
+        showToast(`${playerName} successfully unassigned from team!`, 'success');
+      }
     } catch (error) {
       console.error('Error assigning player:', error);
-      alert('Failed to assign player. Please try again.');
+      showToast('Failed to assign player. Please try again.', 'error');
     }
   };
 
@@ -107,6 +126,21 @@ export default function PlayerManagement() {
 
   const getPositionColor = (position) => {
     const colors = {
+      // Goalkeeper
+      'Goalkeeper (GK)': 'bg-yellow-100 text-yellow-800',
+      // Defenders
+      'Centre-Back (CB)': 'bg-green-100 text-green-800',
+      'Right Back (RB)': 'bg-green-100 text-green-800',
+      'Left Back (LB)': 'bg-green-100 text-green-800',
+      // Midfielders
+      'Defensive Midfielder (CDM)': 'bg-blue-100 text-blue-800',
+      'Central Midfielder (CM)': 'bg-blue-100 text-blue-800',
+      'Attacking Midfielder (CAM)': 'bg-blue-100 text-blue-800',
+      // Wingers/Forwards
+      'Right Winger (RW)': 'bg-red-100 text-red-800',
+      'Left Winger (LW)': 'bg-red-100 text-red-800',
+      'Striker (ST)': 'bg-red-100 text-red-800',
+      // Legacy positions (for backward compatibility)
       'Forward': 'bg-red-100 text-red-800',
       'Midfielder': 'bg-blue-100 text-blue-800',
       'Defender': 'bg-green-100 text-green-800',
@@ -118,9 +152,7 @@ export default function PlayerManagement() {
   const getCategoryColor = (category) => {
     const colors = {
       'A': 'bg-purple-100 text-purple-800',
-      'B': 'bg-indigo-100 text-indigo-800',
-      'C': 'bg-orange-100 text-orange-800',
-      'D': 'bg-pink-100 text-pink-800'
+      'B': 'bg-indigo-100 text-indigo-800'
     };
     return colors[category] || 'bg-gray-100 text-gray-800';
   };
@@ -135,7 +167,7 @@ export default function PlayerManagement() {
           const lines = csv.split('\n');
           const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
           
-          // Expected headers: name, uniId, semester, department, age, position, phone, email (optional: team, category)
+          // Expected headers: name, uniId, semester, department, age, position, phone, email (optional: team, category, jerseyNumber, basePrice)
           const requiredHeaders = ['name', 'uniid', 'semester', 'department', 'age', 'position', 'phone', 'email'];
           const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
           
@@ -171,6 +203,8 @@ export default function PlayerManagement() {
               age: parseInt(playerData.age),
               position: playerData.position,
               category: playerData.category || '', // Optional category from CSV
+              jerseyNumber: playerData.jerseynumber ? parseInt(playerData.jerseynumber) : null, // Optional jersey number
+              basePrice: playerData.baseprice ? parseInt(playerData.baseprice) : null, // Optional base price
               phone: playerData.phone,
               email: playerData.email,
               team: playerData.team || null
@@ -578,6 +612,8 @@ export default function PlayerManagement() {
                 age: parseInt(formData.get('age')),
                 position: formData.get('position'),
                 category: formData.get('category'),
+                jerseyNumber: parseInt(formData.get('jerseyNumber')),
+                basePrice: parseInt(formData.get('basePrice')),
                 phone: formData.get('phone'),
                 email: formData.get('email'),
                 team: formData.get('team') || null
@@ -621,13 +657,23 @@ export default function PlayerManagement() {
                   <input type="number" name="age" min="18" max="30" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Jersey Number</label>
+                  <input type="number" name="jerseyNumber" min="1" max="99" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Position</label>
                   <select name="position" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
                     <option value="">Select Position</option>
-                    <option value="Goalkeeper">Goalkeeper</option>
-                    <option value="Defender">Defender</option>
-                    <option value="Midfielder">Midfielder</option>
-                    <option value="Forward">Forward</option>
+                    <option value="Goalkeeper (GK)">Goalkeeper (GK)</option>
+                    <option value="Centre-Back (CB)">Centre-Back (CB)</option>
+                    <option value="Right Back (RB)">Right Back (RB)</option>
+                    <option value="Left Back (LB)">Left Back (LB)</option>
+                    <option value="Defensive Midfielder (CDM)">Defensive Midfielder (CDM)</option>
+                    <option value="Central Midfielder (CM)">Central Midfielder (CM)</option>
+                    <option value="Attacking Midfielder (CAM)">Attacking Midfielder (CAM)</option>
+                    <option value="Right Winger (RW)">Right Winger (RW)</option>
+                    <option value="Left Winger (LW)">Left Winger (LW)</option>
+                    <option value="Striker (ST)">Striker (ST)</option>
                   </select>
                 </div>
                 <div>
@@ -636,9 +682,11 @@ export default function PlayerManagement() {
                     <option value="">Select Category</option>
                     <option value="A">Category A</option>
                     <option value="B">Category B</option>
-                    <option value="C">Category C</option>
-                    <option value="D">Category D</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Base Price (৳)</label>
+                  <input type="number" name="basePrice" min="0" step="1" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" placeholder="e.g., 5000" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Phone</label>
@@ -683,6 +731,8 @@ export default function PlayerManagement() {
                 age: parseInt(formData.get('age')),
                 position: formData.get('position'),
                 category: formData.get('category'),
+                jerseyNumber: parseInt(formData.get('jerseyNumber')),
+                basePrice: parseInt(formData.get('basePrice')),
                 phone: formData.get('phone'),
                 email: formData.get('email'),
                 team: formData.get('team') || null
@@ -756,6 +806,18 @@ export default function PlayerManagement() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Jersey Number</label>
+                  <input 
+                    type="number" 
+                    name="jerseyNumber" 
+                    defaultValue={editingPlayer.jerseyNumber || ''}
+                    min="1" 
+                    max="99" 
+                    required 
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" 
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Position</label>
                   <select 
                     name="position" 
@@ -764,10 +826,16 @@ export default function PlayerManagement() {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
                   >
                     <option value="">Select Position</option>
-                    <option value="Goalkeeper">Goalkeeper</option>
-                    <option value="Defender">Defender</option>
-                    <option value="Midfielder">Midfielder</option>
-                    <option value="Forward">Forward</option>
+                    <option value="Goalkeeper (GK)">Goalkeeper (GK)</option>
+                    <option value="Centre-Back (CB)">Centre-Back (CB)</option>
+                    <option value="Right Back (RB)">Right Back (RB)</option>
+                    <option value="Left Back (LB)">Left Back (LB)</option>
+                    <option value="Defensive Midfielder (CDM)">Defensive Midfielder (CDM)</option>
+                    <option value="Central Midfielder (CM)">Central Midfielder (CM)</option>
+                    <option value="Attacking Midfielder (CAM)">Attacking Midfielder (CAM)</option>
+                    <option value="Right Winger (RW)">Right Winger (RW)</option>
+                    <option value="Left Winger (LW)">Left Winger (LW)</option>
+                    <option value="Striker (ST)">Striker (ST)</option>
                   </select>
                 </div>
                 <div>
@@ -781,9 +849,20 @@ export default function PlayerManagement() {
                     <option value="">Select Category</option>
                     <option value="A">Category A</option>
                     <option value="B">Category B</option>
-                    <option value="C">Category C</option>
-                    <option value="D">Category D</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Base Price (৳)</label>
+                  <input 
+                    type="number" 
+                    name="basePrice" 
+                    defaultValue={editingPlayer.basePrice || ''}
+                    min="0" 
+                    step="1" 
+                    required 
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" 
+                    placeholder="e.g., 5000"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Phone</label>
@@ -850,8 +929,10 @@ export default function PlayerManagement() {
               <div><strong>Semester:</strong> {viewingPlayer.semester}</div>
               <div><strong>Department:</strong> {viewingPlayer.department}</div>
               <div><strong>Age:</strong> {viewingPlayer.age}</div>
+              <div><strong>Jersey Number:</strong> {viewingPlayer.jerseyNumber || 'Not assigned'}</div>
               <div><strong>Position:</strong> {viewingPlayer.position}</div>
               <div><strong>Performance Category:</strong> {viewingPlayer.category || 'Not assigned'}</div>
+              <div><strong>Base Price:</strong> {viewingPlayer.basePrice ? `৳${viewingPlayer.basePrice.toLocaleString()}` : 'Not set'}</div>
               <div><strong>Phone:</strong> {viewingPlayer.phone}</div>
               <div><strong>Email:</strong> {viewingPlayer.email}</div>
               <div><strong>Current Team:</strong> {viewingPlayer.team || 'Unassigned'}</div>
@@ -957,7 +1038,7 @@ export default function PlayerManagement() {
                 type="button"
                 onClick={() => {
                   // Download sample CSV
-                  const csvContent = "name,uniId,semester,department,age,position,category,phone,email,team\nJohn Doe,UIU-2021-001,5th,CSE,22,Forward,A,01712345678,john@example.com,UIU Tigers\nJane Smith,UIU-2021-002,6th,EEE,23,Midfielder,B,01798765432,jane@example.com,\nMike Johnson,UIU-2021-003,7th,BBA,24,Defender,C,01687654321,mike@example.com,UIU Eagles";
+                  const csvContent = "name,uniId,semester,department,age,position,category,jerseyNumber,basePrice,phone,email,team\nJohn Doe,UIU-2021-001,5th,CSE,22,Striker (ST),A,10,5000,01712345678,john@example.com,UIU Tigers\nJane Smith,UIU-2021-002,6th,EEE,23,Central Midfielder (CM),B,8,4500,01798765432,jane@example.com,\nMike Johnson,UIU-2021-003,7th,BBA,24,Centre-Back (CB),A,5,4000,01687654321,mike@example.com,UIU Eagles";
                   const blob = new Blob([csvContent], { type: 'text/csv' });
                   const url = window.URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -1028,8 +1109,6 @@ export default function PlayerManagement() {
                   <option value="">Choose a category...</option>
                   <option value="A">Category A</option>
                   <option value="B">Category B</option>
-                  <option value="C">Category C</option>
-                  <option value="D">Category D</option>
                 </select>
               </div>
 
@@ -1084,6 +1163,24 @@ export default function PlayerManagement() {
               >
                 {assignmentLoading ? 'Assigning...' : '🎲 Start Random Assignment'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className={`px-6 py-4 rounded-lg shadow-lg ${
+            toast.type === 'success' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}>
+            <div className="flex items-center space-x-2">
+              <span className="text-lg">
+                {toast.type === 'success' ? '✅' : '❌'}
+              </span>
+              <span className="font-medium">{toast.message}</span>
             </div>
           </div>
         </div>

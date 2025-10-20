@@ -19,6 +19,15 @@ export default function TeamManagement() {
   const [dragOver, setDragOver] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [visiblePasswords, setVisiblePasswords] = useState({});
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+
+  // Show toast message
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' });
+    }, 3000);
+  };
 
   // Check authentication and load teams
   useEffect(() => {
@@ -111,9 +120,19 @@ export default function TeamManagement() {
       setTeams(teams.map(team => 
         team.id === teamId ? { ...team, captain: captainName } : team
       ));
+      
+      // Find team name for toast message
+      const team = teams.find(t => t.id === teamId);
+      const teamName = team ? team.name : 'Team';
+      
+      if (captainName) {
+        showToast(`${captainName} successfully set as captain of ${teamName}!`, 'success');
+      } else {
+        showToast(`Captain removed from ${teamName}!`, 'success');
+      }
     } catch (error) {
       console.error('Error updating captain:', error);
-      alert('Failed to update captain. Please try again.');
+      showToast('Failed to update captain. Please try again.', 'error');
     }
   };
 
@@ -931,6 +950,24 @@ export default function TeamManagement() {
               >
                 Delete Team
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed top-4 right-4 z-50">
+          <div className={`px-6 py-4 rounded-lg shadow-lg ${
+            toast.type === 'success' 
+              ? 'bg-green-500 text-white' 
+              : 'bg-red-500 text-white'
+          }`}>
+            <div className="flex items-center space-x-2">
+              <span className="text-lg">
+                {toast.type === 'success' ? '✅' : '❌'}
+              </span>
+              <span className="font-medium">{toast.message}</span>
             </div>
           </div>
         </div>
