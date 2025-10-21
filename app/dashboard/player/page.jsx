@@ -4,6 +4,10 @@ import { playersService, teamsService } from '../../../lib/firebaseService';
 
 export default function PlayerManagement() {
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('all');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+  const [selectedPositionFilter, setSelectedPositionFilter] = useState('all');
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [players, setPlayers] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -52,8 +56,14 @@ export default function PlayerManagement() {
   const handleAssignPlayer = async (playerId, teamName) => {
     try {
       await playersService.assignToTeam(playerId, teamName || null);
+      // If unassigned, reset soldPrice to 0 (unsold)
+      if (!teamName) {
+        await playersService.update(playerId, { soldPrice: 0 });
+      }
       setPlayers(players.map(player => 
-        player.id === playerId ? { ...player, team: teamName || null } : player
+        player.id === playerId 
+          ? { ...player, team: teamName || null, ...(teamName ? {} : { soldPrice: 0 }) } 
+          : player
       ));
       
       // Find player name for toast message
@@ -114,36 +124,40 @@ export default function PlayerManagement() {
     const matchesTeam = selectedTeamFilter === 'all' || 
       (selectedTeamFilter === 'unassigned' && !player.team) ||
       player.team === selectedTeamFilter;
-    
-    const matchesSearch = player.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      player.uniId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      player.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      player.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      player.email?.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    return matchesTeam && matchesSearch;
+
+    const matchesCategory = selectedCategoryFilter === 'all' || (player.category || '').toUpperCase() === selectedCategoryFilter.toUpperCase();
+
+    const normalizePos = (p) => (p || '').toLowerCase();
+    const matchesPosition = selectedPositionFilter === 'all' || normalizePos(player.position) === normalizePos(selectedPositionFilter);
+
+    const matchesAssignment = assignmentStatusFilter === 'all' ||
+      (assignmentStatusFilter === 'assigned' && !!player.team) ||
+      (assignmentStatusFilter === 'unassigned' && !player.team);
+
+    // Role filter based on team's captain/viceCaptain names
+    const teamObj = teams.find(t => t.name === player.team);
+    const matchesRole = roleFilter === 'all' || (
+      roleFilter === 'captain' ? (teamObj && player.name === teamObj.captain) :
+      roleFilter === 'vice_captain' ? (teamObj && player.name === teamObj.viceCaptain) : true
+    );
+
+    const q = searchTerm.toLowerCase();
+    const matchesSearch = player.name?.toLowerCase().includes(q) ||
+      player.uniId?.toLowerCase().includes(q) ||
+      player.department?.toLowerCase().includes(q) ||
+      player.position?.toLowerCase().includes(q) ||
+      player.email?.toLowerCase().includes(q);
+
+    return matchesTeam && matchesCategory && matchesPosition && matchesAssignment && matchesRole && matchesSearch;
   });
 
   const getPositionColor = (position) => {
     const colors = {
-      // Goalkeeper
       'Goalkeeper (GK)': 'bg-yellow-100 text-yellow-800',
-      // Defenders
-      'Centre-Back (CB)': 'bg-green-100 text-green-800',
-      'Right Back (RB)': 'bg-green-100 text-green-800',
-      'Left Back (LB)': 'bg-green-100 text-green-800',
-      // Midfielders
-      'Defensive Midfielder (CDM)': 'bg-blue-100 text-blue-800',
-      'Central Midfielder (CM)': 'bg-blue-100 text-blue-800',
-      'Attacking Midfielder (CAM)': 'bg-blue-100 text-blue-800',
-      // Wingers/Forwards
-      'Right Winger (RW)': 'bg-red-100 text-red-800',
-      'Left Winger (LW)': 'bg-red-100 text-red-800',
-      'Striker (ST)': 'bg-red-100 text-red-800',
-      // Legacy positions (for backward compatibility)
-      'Forward': 'bg-red-100 text-red-800',
       'Midfielder': 'bg-blue-100 text-blue-800',
       'Defender': 'bg-green-100 text-green-800',
+      'Striker': 'bg-red-100 text-red-800',
+      // Legacy/simple names fallback
       'Goalkeeper': 'bg-yellow-100 text-yellow-800'
     };
     return colors[position] || 'bg-gray-100 text-gray-800';
@@ -167,8 +181,8 @@ export default function PlayerManagement() {
           const lines = csv.split('\n');
           const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
           
-          // Expected headers: name, uniId, semester, department, age, position, phone, email (optional: team, category, jerseyNumber, basePrice)
-          const requiredHeaders = ['name', 'uniid', 'semester', 'department', 'age', 'position', 'phone', 'email'];
+          // Expected headers: name, uniId, position (optional: semester, department, age, phone, email, team, category, jerseyNumber, basePrice)
+          const requiredHeaders = ['name', 'uniid', 'position'];
           const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
           
           if (missingHeaders.length > 0) {
@@ -188,25 +202,23 @@ export default function PlayerManagement() {
               playerData[header] = values[index] || '';
             });
             
-            // Validate required fields
-            if (!playerData.name || !playerData.uniid || !playerData.semester || 
-                !playerData.department || !playerData.age || !playerData.position || 
-                !playerData.phone || !playerData.email) {
+            // Validate required fields (others optional)
+            if (!playerData.name || !playerData.uniid || !playerData.position) {
               continue; // Skip invalid rows
             }
             
             players.push({
               name: playerData.name,
               uniId: playerData.uniid,
-              semester: playerData.semester,
-              department: playerData.department,
-              age: parseInt(playerData.age),
+              semester: playerData.semester || '',
+              department: playerData.department || '',
+              age: playerData.age ? parseInt(playerData.age) : null,
               position: playerData.position,
               category: playerData.category || '', // Optional category from CSV
               jerseyNumber: playerData.jerseynumber ? parseInt(playerData.jerseynumber) : null, // Optional jersey number
               basePrice: playerData.baseprice ? parseInt(playerData.baseprice) : null, // Optional base price
-              phone: playerData.phone,
-              email: playerData.email,
+              phone: playerData.phone || '',
+              email: playerData.email || '',
               team: playerData.team || null
             });
           }
@@ -426,7 +438,7 @@ export default function PlayerManagement() {
 
       {/* Filters */}
       <div className="bg-white rounded-lg shadow p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Team</label>
             <select
@@ -443,6 +455,56 @@ export default function PlayerManagement() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+            <select
+              value={selectedCategoryFilter}
+              onChange={(e) => setSelectedCategoryFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-[#D0620D] focus:border-[#D0620D]"
+            >
+              <option value="all">All</option>
+              <option value="A">Category A</option>
+              <option value="B">Category B</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Position</label>
+            <select
+              value={selectedPositionFilter}
+              onChange={(e) => setSelectedPositionFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-[#D0620D] focus:border-[#D0620D]"
+            >
+              <option value="all">All</option>
+              <option value="Goalkeeper (GK)">Goalkeeper (GK)</option>
+              <option value="Defender">Defender</option>
+              <option value="Midfielder">Midfielder</option>
+              <option value="Striker">Striker</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Assignment</label>
+            <select
+              value={assignmentStatusFilter}
+              onChange={(e) => setAssignmentStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-[#D0620D] focus:border-[#D0620D]"
+            >
+              <option value="all">All</option>
+              <option value="assigned">Assigned</option>
+              <option value="unassigned">Unassigned</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-[#D0620D] focus:border-[#D0620D]"
+            >
+              <option value="all">All</option>
+              <option value="captain">Captain</option>
+              <option value="vice_captain">Vice Captain</option>
+            </select>
+          </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search Players</label>
@@ -455,7 +517,7 @@ export default function PlayerManagement() {
             />
           </div>
 
-          <div className="flex items-end">
+          <div className="flex items-end md:col-span-5">
             <div className="text-sm text-gray-600">
               Showing {filteredPlayers.length} of {players.length} players
             </div>
@@ -511,9 +573,19 @@ export default function PlayerManagement() {
               filteredPlayers.map((player) => (
                 <tr key={player.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{player.name}</div>
-                      <div className="text-sm text-gray-500">{player.uniId} • {player.semester} Semester</div>
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center border border-gray-300">
+                        <img
+                          src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(player.uniId || '')}`}
+                          alt={`${player.name} photo`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{player.name}</div>
+                        <div className="text-sm text-gray-500">{player.uniId} • {player.semester} Semester</div>
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -545,16 +617,21 @@ export default function PlayerManagement() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <select
-                      value={player.team || ''}
-                      onChange={(e) => handleAssignPlayer(player.id, e.target.value)}
-                      className="px-3 py-1 border border-gray-300 rounded focus:ring-[#D0620D] focus:border-[#D0620D] text-sm"
-                    >
-                      <option value="">Unassigned</option>
-                      {teams.map(team => (
-                        <option key={team.id} value={team.name}>{team.name}</option>
-                      ))}
-                    </select>
+                    <div className="flex flex-col items-start">
+                      <select
+                        value={player.team || ''}
+                        onChange={(e) => handleAssignPlayer(player.id, e.target.value)}
+                        className="px-3 py-1 border border-gray-300 rounded focus:ring-[#D0620D] focus:border-[#D0620D] text-sm"
+                      >
+                        <option value="">Unassigned</option>
+                        {teams.map(team => (
+                          <option key={team.id} value={team.name}>{team.name}</option>
+                        ))}
+                      </select>
+                      {player.soldPrice ? (
+                        <span className="text-green-600 text-xs mt-1">Sold Price: ৳{Number(player.soldPrice).toLocaleString()}</span>
+                      ) : null}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
@@ -604,18 +681,21 @@ export default function PlayerManagement() {
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
+              const ageVal = formData.get('age');
+              const jerseyVal = formData.get('jerseyNumber');
+              const basePriceVal = formData.get('basePrice');
               const playerData = {
                 name: formData.get('name'),
                 uniId: formData.get('uniId'),
-                semester: formData.get('semester'),
-                department: formData.get('department'),
-                age: parseInt(formData.get('age')),
+                semester: formData.get('semester') || '',
+                department: formData.get('department') || '',
+                age: ageVal ? parseInt(ageVal) : null,
                 position: formData.get('position'),
-                category: formData.get('category'),
-                jerseyNumber: parseInt(formData.get('jerseyNumber')),
-                basePrice: parseInt(formData.get('basePrice')),
-                phone: formData.get('phone'),
-                email: formData.get('email'),
+                category: formData.get('category') || '',
+                jerseyNumber: jerseyVal ? parseInt(jerseyVal) : null,
+                basePrice: basePriceVal ? parseInt(basePriceVal) : null,
+                phone: formData.get('phone') || '',
+                email: formData.get('email') || '',
                 team: formData.get('team') || null
               };
               handleAddPlayer(playerData);
@@ -631,7 +711,7 @@ export default function PlayerManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Semester</label>
-                  <select name="semester" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
+                  <select name="semester" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
                     <option value="">Select Semester</option>
                     {[1,2,3,4,5,6,7,8,9,10,11,12].map(sem => (
                       <option key={sem} value={`${sem}${sem === 1 ? 'st' : sem === 2 ? 'nd' : sem === 3 ? 'rd' : 'th'}`}>
@@ -642,7 +722,7 @@ export default function PlayerManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Department</label>
-                  <select name="department" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
+                  <select name="department" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
                     <option value="">Select Department</option>
                     <option value="CSE">Computer Science & Engineering</option>
                     <option value="EEE">Electrical & Electronic Engineering</option>
@@ -654,31 +734,25 @@ export default function PlayerManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Age</label>
-                  <input type="number" name="age" min="18" max="30" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
+                  <input type="number" name="age" min="18" max="30" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Jersey Number</label>
-                  <input type="number" name="jerseyNumber" min="1" max="99" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
+                  <input type="number" name="jerseyNumber" min="1" max="99" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Position</label>
                   <select name="position" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
                     <option value="">Select Position</option>
                     <option value="Goalkeeper (GK)">Goalkeeper (GK)</option>
-                    <option value="Centre-Back (CB)">Centre-Back (CB)</option>
-                    <option value="Right Back (RB)">Right Back (RB)</option>
-                    <option value="Left Back (LB)">Left Back (LB)</option>
-                    <option value="Defensive Midfielder (CDM)">Defensive Midfielder (CDM)</option>
-                    <option value="Central Midfielder (CM)">Central Midfielder (CM)</option>
-                    <option value="Attacking Midfielder (CAM)">Attacking Midfielder (CAM)</option>
-                    <option value="Right Winger (RW)">Right Winger (RW)</option>
-                    <option value="Left Winger (LW)">Left Winger (LW)</option>
-                    <option value="Striker (ST)">Striker (ST)</option>
+                    <option value="Midfielder">Midfielder</option>
+                    <option value="Defender">Defender</option>
+                    <option value="Striker">Striker</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Performance Category</label>
-                  <select name="category" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
+                  <select name="category" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]">
                     <option value="">Select Category</option>
                     <option value="A">Category A</option>
                     <option value="B">Category B</option>
@@ -686,15 +760,15 @@ export default function PlayerManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Base Price (৳)</label>
-                  <input type="number" name="basePrice" min="0" step="1" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" placeholder="e.g., 5000" />
+                  <input type="number" name="basePrice" min="0" step="1" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" placeholder="e.g., 5000" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Phone</label>
-                  <input type="tel" name="phone" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
+                  <input type="tel" name="phone" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Email</label>
-                  <input type="email" name="email" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
+                  <input type="email" name="email" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" />
                 </div>
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700">Assign to Team (Optional)</label>
@@ -723,18 +797,21 @@ export default function PlayerManagement() {
             <form onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
+              const ageVal = formData.get('age');
+              const jerseyVal = formData.get('jerseyNumber');
+              const basePriceVal = formData.get('basePrice');
               const playerData = {
                 name: formData.get('name'),
                 uniId: formData.get('uniId'),
-                semester: formData.get('semester'),
-                department: formData.get('department'),
-                age: parseInt(formData.get('age')),
+                semester: formData.get('semester') || '',
+                department: formData.get('department') || '',
+                age: ageVal ? parseInt(ageVal) : null,
                 position: formData.get('position'),
-                category: formData.get('category'),
-                jerseyNumber: parseInt(formData.get('jerseyNumber')),
-                basePrice: parseInt(formData.get('basePrice')),
-                phone: formData.get('phone'),
-                email: formData.get('email'),
+                category: formData.get('category') || '',
+                jerseyNumber: jerseyVal ? parseInt(jerseyVal) : null,
+                basePrice: basePriceVal ? parseInt(basePriceVal) : null,
+                phone: formData.get('phone') || '',
+                email: formData.get('email') || '',
                 team: formData.get('team') || null
               };
               handleEditPlayer(playerData);
@@ -765,7 +842,7 @@ export default function PlayerManagement() {
                   <select 
                     name="semester" 
                     defaultValue={editingPlayer.semester}
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
                   >
                     <option value="">Select Semester</option>
@@ -781,7 +858,7 @@ export default function PlayerManagement() {
                   <select 
                     name="department" 
                     defaultValue={editingPlayer.department}
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
                   >
                     <option value="">Select Department</option>
@@ -801,7 +878,7 @@ export default function PlayerManagement() {
                     defaultValue={editingPlayer.age}
                     min="18" 
                     max="30" 
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" 
                   />
                 </div>
@@ -813,7 +890,7 @@ export default function PlayerManagement() {
                     defaultValue={editingPlayer.jerseyNumber || ''}
                     min="1" 
                     max="99" 
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" 
                   />
                 </div>
@@ -827,15 +904,9 @@ export default function PlayerManagement() {
                   >
                     <option value="">Select Position</option>
                     <option value="Goalkeeper (GK)">Goalkeeper (GK)</option>
-                    <option value="Centre-Back (CB)">Centre-Back (CB)</option>
-                    <option value="Right Back (RB)">Right Back (RB)</option>
-                    <option value="Left Back (LB)">Left Back (LB)</option>
-                    <option value="Defensive Midfielder (CDM)">Defensive Midfielder (CDM)</option>
-                    <option value="Central Midfielder (CM)">Central Midfielder (CM)</option>
-                    <option value="Attacking Midfielder (CAM)">Attacking Midfielder (CAM)</option>
-                    <option value="Right Winger (RW)">Right Winger (RW)</option>
-                    <option value="Left Winger (LW)">Left Winger (LW)</option>
-                    <option value="Striker (ST)">Striker (ST)</option>
+                    <option value="Midfielder">Midfielder</option>
+                    <option value="Defender">Defender</option>
+                    <option value="Striker">Striker</option>
                   </select>
                 </div>
                 <div>
@@ -843,7 +914,7 @@ export default function PlayerManagement() {
                   <select 
                     name="category" 
                     defaultValue={editingPlayer.category || ''}
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
                   >
                     <option value="">Select Category</option>
@@ -859,7 +930,7 @@ export default function PlayerManagement() {
                     defaultValue={editingPlayer.basePrice || ''}
                     min="0" 
                     step="1" 
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" 
                     placeholder="e.g., 5000"
                   />
@@ -870,7 +941,7 @@ export default function PlayerManagement() {
                     type="tel" 
                     name="phone" 
                     defaultValue={editingPlayer.phone}
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" 
                   />
                 </div>
@@ -880,7 +951,7 @@ export default function PlayerManagement() {
                     type="email" 
                     name="email" 
                     defaultValue={editingPlayer.email}
-                    required 
+                    
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]" 
                   />
                 </div>
@@ -1038,7 +1109,7 @@ export default function PlayerManagement() {
                 type="button"
                 onClick={() => {
                   // Download sample CSV
-                  const csvContent = "name,uniId,semester,department,age,position,category,jerseyNumber,basePrice,phone,email,team\nJohn Doe,UIU-2021-001,5th,CSE,22,Striker (ST),A,10,5000,01712345678,john@example.com,UIU Tigers\nJane Smith,UIU-2021-002,6th,EEE,23,Central Midfielder (CM),B,8,4500,01798765432,jane@example.com,\nMike Johnson,UIU-2021-003,7th,BBA,24,Centre-Back (CB),A,5,4000,01687654321,mike@example.com,UIU Eagles";
+                  const csvContent = "name,uniId,semester,department,age,position,category,jerseyNumber,basePrice,phone,email,team\nJohn Doe,UIU-2021-001,5th,CSE,22,Striker,A,10,5000,01712345678,john@example.com,UIU Tigers\nJane Smith,UIU-2021-002,6th,EEE,23,Midfielder,B,8,4500,01798765432,jane@example.com,\nMike Johnson,UIU-2021-003,7th,BBA,24,Defender,A,5,4000,01687654321,mike@example.com,UIU Eagles";
                   const blob = new Blob([csvContent], { type: 'text/csv' });
                   const url = window.URL.createObjectURL(blob);
                   const a = document.createElement('a');

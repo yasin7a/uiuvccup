@@ -10,6 +10,8 @@ export default function Auction() {
   const { currentUser, isAdmin } = useAuth();
   const [teams, setTeams] = useState([]);
   const [unassignedPlayers, setUnassignedPlayers] = useState([]);
+  const [allUnassignedPlayers, setAllUnassignedPlayers] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState('A');
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [bidAmount, setBidAmount] = useState('');
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -27,6 +29,23 @@ export default function Auction() {
   useEffect(() => {
     loadAuctionData();
   }, []);
+
+  // Utility: shuffle array for random auction order
+  const shuffle = (arr) => arr
+    .map(item => ({ item, sort: Math.random() }))
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ item }) => item);
+
+  // Re-filter players when category or source changes
+  useEffect(() => {
+    const filtered = allUnassignedPlayers.filter(p => {
+      // If category missing on player, exclude when filtering
+      return selectedCategory ? (p.category === selectedCategory) : true;
+    });
+    // Shuffle so a random player shows first for this category
+    setUnassignedPlayers(shuffle(filtered));
+    setCurrentPlayerIndex(0);
+  }, [selectedCategory, allUnassignedPlayers]);
 
   // Timer effect for auction countdown
   useEffect(() => {
@@ -77,9 +96,30 @@ export default function Auction() {
     }
 
     try {
-      // Assign player to highest bidding team
       await playersService.assignToTeam(currentPlayer.id, highestBidder);
+      await playersService.update(currentPlayer.id, { soldPrice: highestBid });
       
+      // Update winning team's spent balance (ensure affordability with raiseSpent considered)
+      const winningTeam = teams.find(t => t.name === highestBidder);
+      if (winningTeam) {
+        const total = winningTeam.totalBalance ?? 500000;
+        const currentCommitted = (winningTeam.spent ?? 0) + (winningTeam.raiseSpent ?? 0);
+        const remaining = total - currentCommitted;
+        // Winner must be able to pay the winning bid at assignment time
+        if (remaining < highestBid) {
+          alert(`Winner cannot afford the winning bid. Remaining: ৳${remaining.toLocaleString()}, Needed: ৳${highestBid.toLocaleString()}`);
+          return;
+        }
+        // Add winning bid to spent; raise fees are tracked separately in raiseSpent
+        const newSpent = (winningTeam.spent ?? 0) + highestBid;
+        await teamsService.update(winningTeam.id, {
+          totalBalance: winningTeam.totalBalance ?? 500000,
+          spent: newSpent,
+        });
+        // Update local state
+        setTeams(prev => prev.map(t => t.id === winningTeam.id ? { ...t, spent: newSpent, totalBalance: t.totalBalance ?? 500000 } : t));
+      }
+
       // Add to bid history
       setBidHistory(prev => [
         { 
@@ -141,11 +181,19 @@ export default function Auction() {
         playersService.getAll()
       ]);
       
-      // Filter unassigned players
+      // Filter unassigned players and store
       const unassigned = playersData.filter(player => !player.team);
-      
-      setTeams(teamsData);
-      setUnassignedPlayers(unassigned);
+      // Ensure balances have sane defaults on the client even if missing in DB
+      setTeams(teamsData.map(t => ({
+        ...t,
+        totalBalance: t.totalBalance ?? 500000,
+        spent: t.spent ?? 0,
+        raiseSpent: t.raiseSpent ?? 0,
+      })));
+      setAllUnassignedPlayers(unassigned);
+      // Initial category filter (shuffled for random order)
+      const initial = unassigned.filter(p => p.category === selectedCategory);
+      setUnassignedPlayers(shuffle(initial));
     } catch (error) {
       console.error('Error loading auction data:', error);
     } finally {
@@ -154,8 +202,26 @@ export default function Auction() {
   };
 
   const currentPlayer = unassignedPlayers[currentPlayerIndex];
+  const getCategoryBasePrice = (category) => {
+    if (category === 'A') return 10000;
+    if (category === 'B') return 5000;
+    return 0;
+  };
+  const basePrice = currentPlayer ? getCategoryBasePrice(currentPlayer.category) : 0;
 
-  const handlePlaceBid = () => {
+  // Next bid must be strictly greater than current highest; base price if no bids yet
+  const requiredMinBid = highestBid > 0 ? (highestBid + 1) : basePrice;
+  const selectedTeamObj = teams.find(t => t.name === selectedTeam);
+  const selectedTeamTotal = selectedTeamObj?.totalBalance ?? 500000;
+  const selectedTeamSpent = (selectedTeamObj?.spent ?? 0) + (selectedTeamObj?.raiseSpent ?? 0);
+  const selectedTeamRemaining = selectedTeamTotal - selectedTeamSpent;
+
+  const getRaiseCharge = (team) => {
+    const committed = (team?.spent ?? 0) + (team?.raiseSpent ?? 0);
+    return committed < 20000 ? 2000 : 5000;
+  };
+
+  const handlePlaceBid = async () => {
     if (!currentUser || !isAdmin) {
       alert('Only administrators can place bids. Please log in as admin.');
       return;
@@ -163,8 +229,35 @@ export default function Auction() {
     if (!bidAmount || !selectedTeam || !currentPlayer || !isAuctionActive) return;
     
     const bidAmountNum = parseInt(bidAmount);
-    if (bidAmountNum <= highestBid) {
-      alert(`Bid must be higher than current highest bid of ৳${highestBid.toLocaleString()}`);
+    // Enforce: if highest exists, next bid must be greater than highest; else >= base price
+    if (highestBid > 0) {
+      if (bidAmountNum <= highestBid) {
+        alert(`Bid must be greater than current highest bid of ৳${highestBid.toLocaleString()}`);
+        return;
+      }
+    } else if (bidAmountNum < basePrice) {
+      alert(`Bid must be at least the base price ৳${basePrice.toLocaleString()}`);
+      return;
+    }
+
+    // First: charge raise fee immediately per team raise policy
+    const teamObj = teams.find(t => t.name === selectedTeam);
+    const raiseCharge = getRaiseCharge(teamObj);
+    if (selectedTeamRemaining < raiseCharge) {
+      alert(`Insufficient balance for raise fee of ৳${raiseCharge.toLocaleString()}. Remaining: ৳${selectedTeamRemaining.toLocaleString()}`);
+      return;
+    }
+
+    // Persist raise fee immediately to team's raiseSpent
+    try {
+      if (teamObj) {
+        const newRaiseSpent = (teamObj.raiseSpent ?? 0) + raiseCharge;
+        await teamsService.update(teamObj.id, { raiseSpent: newRaiseSpent, totalBalance: teamObj.totalBalance ?? 500000 });
+        setTeams(prev => prev.map(t => t.id === teamObj.id ? { ...t, raiseSpent: newRaiseSpent, totalBalance: t.totalBalance ?? 500000 } : t));
+      }
+    } catch (e) {
+      console.error('Failed to apply raise fee:', e);
+      alert('Failed to apply raise fee. Please try again.');
       return;
     }
 
@@ -218,6 +311,25 @@ export default function Auction() {
       {/* Current Auction */}
       <section className="py-16" style={{ backgroundColor: '#0A0D13' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Admin Category Selector */}
+          {isAdmin && (
+            <div className="mb-6 flex items-center justify-center">
+              <div className="inline-flex rounded-lg overflow-hidden border border-gray-700">
+                <button
+                  onClick={() => setSelectedCategory('A')}
+                  className={`px-4 py-2 text-sm font-medium ${selectedCategory === 'A' ? 'bg-[#D0620D] text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                >
+                  Category A
+                </button>
+                <button
+                  onClick={() => setSelectedCategory('B')}
+                  className={`px-4 py-2 text-sm font-medium border-l border-gray-700 ${selectedCategory === 'B' ? 'bg-[#D0620D] text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
+                >
+                  Category B
+                </button>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="text-center py-16">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D0620D] mx-auto mb-4"></div>
@@ -258,8 +370,12 @@ export default function Auction() {
             </div>
           ) : !currentPlayer || unassignedPlayers.length === 0 ? (
             <div className="text-center py-16">
-              <h2 className="text-4xl font-bold text-white mb-4">Auction Complete!</h2>
-              <p className="text-gray-300 mb-6">All players have been assigned to teams.</p>
+              <h2 className="text-4xl font-bold text-white mb-4">{allUnassignedPlayers.length === 0 ? 'Auction Complete!' : 'No players in this category'}</h2>
+              <p className="text-gray-300 mb-6">
+                {allUnassignedPlayers.length === 0 
+                  ? 'All players have been assigned to teams.' 
+                  : `There are no unassigned players in Category ${selectedCategory}.`}
+              </p>
               <Link href="/teams" className="bg-[#D0620D] text-white px-6 py-3 rounded-lg font-medium hover:bg-[#B8540B] transition-colors">
                 View Teams
               </Link>
@@ -302,17 +418,22 @@ export default function Auction() {
 
                   <div className="grid md:grid-cols-2 gap-8">
                     <div>
-                      <div className="w-64 h-64 bg-gray-800 rounded-2xl flex items-center justify-center border border-gray-700 mx-auto mb-6">
-                        <div className="text-6xl">
-                          {currentPlayer.position === 'Goalkeeper' ? '🥅' : 
-                           currentPlayer.position === 'Defender' ? '🛡️' : 
-                           currentPlayer.position === 'Midfielder' ? '⚽' : '🎯'}
-                        </div>
+                      <div className="w-64 h-64 bg-gray-800 rounded-2xl flex items-center justify-center border border-gray-700 mx-auto mb-6 overflow-hidden">
+                        <img
+                          src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(currentPlayer.uniId || '')}`}
+                          alt={`${currentPlayer.name} photo`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
                       </div>
                     </div>
                     
                     <div>
-                      <h2 className="text-3xl font-bold text-white mb-4">{currentPlayer.name}</h2>
+                      <h2 className="text-3xl font-bold text-white mb-2">{currentPlayer.name}</h2>
+                      {/* Base Price */}
+                      <div className="mb-4">
+                        <span className="bg-gray-800 px-3 py-1 rounded-full text-sm inline-block">Base: ৳{basePrice.toLocaleString()}</span>
+                      </div>
                       <div className="space-y-3 mb-6">
                         <div className="flex items-center space-x-2">
                           <span className="bg-[#D0620D] px-3 py-1 rounded-full text-sm text-white">{currentPlayer.position}</span>
@@ -325,21 +446,21 @@ export default function Auction() {
                         <div className="bg-gray-800 px-3 py-1 rounded-full text-sm inline-block">ID: {currentPlayer.uniId}</div>
                       </div>
 
-                      {/* Current Bid Status */}
-                      <div className="mb-6 p-4 bg-gray-800 rounded-lg">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="text-gray-300">Current Highest Bid:</span>
-                          <span className="text-[#D0620D] font-bold text-xl">
-                            {highestBid > 0 ? `৳${highestBid.toLocaleString()}` : 'No bids yet'}
-                          </span>
-                        </div>
-                        {highestBidder && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-gray-300">Leading Team:</span>
-                            <span className="text-white font-semibold">{highestBidder}</span>
+                      {/* Current Bid Status - only when there is at least one bid */}
+                      {highestBid > 0 && (
+                        <div className="mb-6 p-4 bg-gray-800 rounded-lg">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-gray-300">Current Highest Bid:</span>
+                            <span className="text-[#D0620D] font-bold text-xl">৳{highestBid.toLocaleString()}</span>
                           </div>
-                        )}
-                      </div>
+                          {highestBidder && (
+                            <div className="flex justify-between items-center">
+                              <span className="text-gray-300">Leading Team:</span>
+                              <span className="text-white font-semibold">{highestBidder}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="space-y-4">
                         {!isAuctionActive ? (
@@ -379,31 +500,38 @@ export default function Auction() {
                                 <div className="flex-1">
                                   <input 
                                     type="number" 
-                                    placeholder={`Minimum: ৳${(highestBid + 100).toLocaleString()}`}
+                                    placeholder={`Minimum: ${highestBid > 0 ? `> ৳${highestBid.toLocaleString()}` : `৳${basePrice.toLocaleString()}`}`}
                                     value={bidAmount}
                                     onChange={(e) => setBidAmount(e.target.value)}
-                                    min={highestBid + 100}
+                                    min={highestBid > 0 ? highestBid + 1 : basePrice}
                                     disabled={!currentUser || !isAdmin}
                                     className={`w-full px-4 py-3 rounded-lg bg-gray-800 border text-white placeholder-gray-400 focus:border-[#D0620D] focus:outline-none ${!currentUser || !isAdmin ? 'border-gray-700 opacity-50 cursor-not-allowed' : 'border-gray-600'}`}
                                   />
                                 </div>
                                 <button 
                                   onClick={handlePlaceBid}
-                                  disabled={!currentUser || !isAdmin || !bidAmount || !selectedTeam || parseInt(bidAmount) <= highestBid}
+                                  disabled={!currentUser || !isAdmin || !bidAmount || !selectedTeam || parseInt(bidAmount) < (highestBid > 0 ? highestBid + 1 : basePrice)}
                                   className="bg-[#D0620D] text-white px-6 py-3 rounded-lg font-semibold hover:bg-[#B8540B] transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed"
                                 >
                                   Place Bid
                                 </button>
                               </div>
                               <p className="text-gray-400 text-xs">
-                                Minimum bid: ৳{(highestBid + 100).toLocaleString()}
+                                {highestBid > 0 
+                                  ? `Minimum next bid: > ৳${highestBid.toLocaleString()}` 
+                                  : `Minimum bid: ৳${basePrice.toLocaleString()}`}
                               </p>
+                              {selectedTeam && (
+                                <div className="text-gray-400 text-xs mt-1">
+                                  Team Remaining: ৳{selectedTeamRemaining.toLocaleString()} • Required (Base + Bid): ৳{(basePrice + (parseInt(bidAmount||'0')||0)).toLocaleString()}
+                                </div>
+                              )}
                             </div>
                           </>
                         )}
                         
                         <div className="flex gap-3">
-                          {/* Confirm Assignment Button - Only show when auction is active and there are bids */}
+                          {/* Confirm Assignment Button - Only when there are bids */}
                           {isAuctionActive && highestBid > 0 && (
                             <button 
                               onClick={confirmPlayerAssignment}
@@ -416,7 +544,7 @@ export default function Auction() {
                           
                           <button 
                             onClick={skipPlayer}
-                            disabled={isAuctionActive}
+                            disabled={isAuctionActive && !isTimeExpired}
                             className="border border-gray-600 text-gray-300 px-4 py-2 rounded-lg font-semibold hover:bg-gray-700 transition-colors flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             Skip Player
@@ -498,10 +626,10 @@ export default function Auction() {
                           <div className="text-gray-400 text-xs">Captain: {team.captain || 'Not assigned'}</div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-[#D0620D] font-bold text-sm">
-                          {bidHistory.filter(bid => bid.team === team.name).length} Players
-                        </div>
+                      <div className="text-right text-xs">
+                        <div className="text-gray-300">Spent: <span className="text-white font-semibold">৳{(((team.spent ?? 0) + (team.raiseSpent ?? 0))).toLocaleString()}</span> / <span className="text-white font-semibold">৳{(team.totalBalance ?? 500000).toLocaleString()}</span></div>
+                        <div className="text-gray-400">Remaining: <span className="text-[#D0620D] font-bold">৳{(((team.totalBalance ?? 500000) - ((team.spent ?? 0) + (team.raiseSpent ?? 0)))).toLocaleString()}</span></div>
+                        <div className="text-gray-500 mt-1">Players: {bidHistory.filter(bid => bid.team === team.name).length}</div>
                       </div>
                     </div>
                   ))}
@@ -521,12 +649,13 @@ export default function Auction() {
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               {unassignedPlayers.slice(currentPlayerIndex + 1, currentPlayerIndex + 9).map((player, index) => (
                 <div key={player.id} className="border border-gray-700 rounded-xl p-6 text-center hover:border-[#D0620D] transition-all duration-300" style={{ backgroundColor: '#0A0D13' }}>
-                  <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">
-                      {player.position === 'Goalkeeper' ? '🥅' : 
-                       player.position === 'Defender' ? '🛡️' : 
-                       player.position === 'Midfielder' ? '⚽' : '🎯'}
-                    </span>
+                  <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 overflow-hidden">
+                    <img
+                      src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(player.uniId || '')}`}
+                      alt={`${player.name} photo`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
                   </div>
                   <h4 className="text-lg font-bold text-white mb-2">{player.name}</h4>
                   <div className="space-y-2 mb-4">

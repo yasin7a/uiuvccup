@@ -120,6 +120,20 @@ export default function TeamOwnerDashboard() {
                 )}
               </p>
               <p className="text-gray-600">
+                Vice Captain: {team.viceCaptain ? (
+                  <span className="font-medium text-gray-900">{team.viceCaptain}</span>
+                ) : (
+                  <span className="italic">Not assigned</span>
+                )}
+              </p>
+              <p className="text-gray-600">
+                Mentor: {team.mentor ? (
+                  <span className="font-medium text-gray-900">{team.mentor}</span>
+                ) : (
+                  <span className="italic">Not set</span>
+                )}
+              </p>
+              <p className="text-gray-600">
                 Total Players: <span className="font-medium text-gray-900">{players.length}</span>
               </p>
             </div>
@@ -184,7 +198,7 @@ export default function TeamOwnerDashboard() {
                       Position
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Department
+                      Sold Price
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Semester
@@ -201,7 +215,15 @@ export default function TeamOwnerDashboard() {
                   {players.map((player) => (
                     <tr key={player.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center border border-gray-300">
+                            <img
+                              src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(player.uniId || '')}`}
+                              alt={`${player.name} photo`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          </div>
                           <div className="text-sm font-medium text-gray-900">{player.name}</div>
                         </div>
                       </td>
@@ -215,8 +237,12 @@ export default function TeamOwnerDashboard() {
                           <span className="text-sm text-gray-900">{player.position}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {player.department}
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {player.soldPrice && player.soldPrice > 0 ? (
+                          <span className="text-green-600 font-semibold">৳{Number(player.soldPrice).toLocaleString()}</span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {player.semester}
@@ -228,6 +254,10 @@ export default function TeamOwnerDashboard() {
                         {player.name === team.captain ? (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#D0620D] text-white">
                             Captain
+                          </span>
+                        ) : player.name === team.viceCaptain ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-800 text-white">
+                            Vice Captain
                           </span>
                         ) : (
                           <span className="text-sm text-gray-500">Player</span>

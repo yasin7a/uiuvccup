@@ -29,6 +29,26 @@ export default function TeamManagement() {
     }, 3000);
   };
 
+  const handleViceCaptainChange = async (teamId, viceCaptainName) => {
+    try {
+      await teamsService.update(teamId, { viceCaptain: viceCaptainName });
+      setTeams(teams.map(team => 
+        team.id === teamId ? { ...team, viceCaptain: viceCaptainName } : team
+      ));
+
+      const team = teams.find(t => t.id === teamId);
+      const teamName = team ? team.name : 'Team';
+      if (viceCaptainName) {
+        showToast(`${viceCaptainName} set as vice captain of ${teamName}!`, 'success');
+      } else {
+        showToast(`Vice captain removed from ${teamName}!`, 'success');
+      }
+    } catch (error) {
+      console.error('Error updating vice captain:', error);
+      showToast('Failed to update vice captain. Please try again.', 'error');
+    }
+  };
+
   // Check authentication and load teams
   useEffect(() => {
     console.log('🛡️ TeamManagement: Auth check', {
@@ -101,6 +121,110 @@ export default function TeamManagement() {
 
   const handleEditTeam = (team) => {
     setDeleteConfirm(null);
+    setEditingTeam(team);
+  };
+
+  // ===== Teams CSV Upload Helpers =====
+  const processTeamsCsvFile = async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const csv = e.target.result;
+          const lines = csv.split('\n').filter(Boolean);
+          if (lines.length === 0) return resolve([]);
+          const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+
+          // Required headers: name. Optional: email, captain, mentor, logo
+          const requiredHeaders = ['name'];
+          const missing = requiredHeaders.filter(h => !headers.includes(h));
+          if (missing.length > 0) {
+            reject(new Error(`Missing required columns: ${missing.join(', ')}`));
+            return;
+          }
+
+          const out = [];
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            const values = line.split(',').map(v => v.trim());
+            const row = {};
+            headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+            if (!row.name) continue;
+            out.push({
+              name: row.name,
+              email: row.email || '',
+              captain: row.captain || '',
+              mentor: row.mentor || '',
+              logo: row.logo || ''
+            });
+          }
+          resolve(out);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsText(file);
+    });
+  };
+
+  const handleCsvUpload = async (file) => {
+    try {
+      setCsvUploading(true);
+      const teamRows = await processTeamsCsvFile(file);
+      if (teamRows.length === 0) {
+        showToast('No valid rows found in CSV.', 'error');
+        return;
+      }
+      const created = [];
+      for (const row of teamRows) {
+        // Upload logo if provided as URL? If it's a URL, we just save it. No file upload in CSV path.
+        let ownerId = null;
+        let generatedPassword = null;
+        if (row.email) {
+          try {
+            const creds = await userService.createTeamOwner(row.email, row.name);
+            ownerId = creds.uid;
+            generatedPassword = creds.password;
+          } catch (e) {
+            console.error('Failed to create owner from CSV row:', row.name, e);
+          }
+        }
+        const teamData = {
+          name: row.name,
+          captain: row.captain || '',
+          mentor: row.mentor || '',
+          email: row.email || '',
+          ownerId,
+          generatedPassword,
+          logo: row.logo || null,
+          color: '#D0620D'
+        };
+        const id = await teamsService.create(teamData);
+        created.push({ id, ...teamData, players: 0 });
+      }
+      setTeams([...teams, ...created]);
+      setShowCsvModal(false);
+      showToast(`Imported ${created.length} team(s) successfully.`, 'success');
+    } catch (error) {
+      console.error('CSV import failed:', error);
+      showToast(`CSV import failed: ${error.message}`, 'error');
+    } finally {
+      setCsvUploading(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+  const handleDragLeave = () => setDragOver(false);
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleCsvUpload(file);
   };
 
   // Toggle password visibility
@@ -146,12 +270,31 @@ export default function TeamManagement() {
         logoUrl = await uploadLogo(logoFile);
       }
       
-      // Create updated team data (only name and logo can be updated)
+      // Determine email changes and create credentials if needed
+      const newEmail = (updatedTeamData.email || '').trim();
+      let ownerId = editingTeam.ownerId || null;
+      let generatedPassword = editingTeam.generatedPassword || null;
+      if (newEmail && newEmail !== (editingTeam.email || '')) {
+        try {
+          const creds = await userService.createTeamOwner(newEmail, updatedTeamData.name || editingTeam.name);
+          ownerId = creds.uid;
+          generatedPassword = creds.password;
+          showToast(`Owner account created. Email: ${creds.email} Password: ${creds.password}`, 'success');
+        } catch (err) {
+          console.error('Error creating owner for updated email:', err);
+          showToast('Failed to create owner account for the provided email.', 'error');
+        }
+      }
+
+      // Create updated team data
       const updatedTeam = {
         ...editingTeam,
         name: updatedTeamData.name,
-        logo: logoUrl
-        // Captain and other fields remain unchanged
+        logo: logoUrl,
+        mentor: updatedTeamData.mentor || '',
+        email: newEmail || editingTeam.email || '',
+        ownerId,
+        generatedPassword
       };
       
       // Update in Firebase
@@ -220,7 +363,8 @@ export default function TeamManagement() {
         ownerId: ownerCredentials.uid,
         generatedPassword: ownerCredentials.password,
         logo: logoUrl,
-        color: '#D0620D'
+        color: '#D0620D',
+        mentor: newTeamData.mentor || ''
       };
       
       // Save to Firebase
@@ -297,142 +441,7 @@ export default function TeamManagement() {
     }
   };
 
-  // CSV file processing function
-  const processCsvFile = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const csv = e.target.result;
-          const lines = csv.split('\n');
-          const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-          
-          // Expected headers: name (optional: captain, logo)
-          const requiredHeaders = ['name'];
-          const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-          
-          if (missingHeaders.length > 0) {
-            reject(new Error(`Missing required columns: ${missingHeaders.join(', ')}`));
-            return;
-          }
-          
-          const teams = [];
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue; // Skip empty lines
-            
-            const values = line.split(',').map(v => v.trim());
-            const teamData = {};
-            
-            headers.forEach((header, index) => {
-              teamData[header] = values[index] || '';
-            });
-            
-            // Validate required fields
-            if (!teamData.name) {
-              continue; // Skip invalid rows
-            }
-            
-            teams.push({
-              name: teamData.name,
-              captain: teamData.captain || '', // Optional captain from CSV
-              color: '#D0620D', // Fixed default color
-              logo: teamData.logo || null
-            });
-          }
-          
-          resolve(teams);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsText(file);
-    });
-  };
-
-  // Handle CSV upload and bulk team creation
-  const handleCsvUpload = async (file) => {
-    try {
-      setCsvUploading(true);
-      
-      // Validate file type
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        alert('Please upload a CSV file (.csv)');
-        return;
-      }
-      
-      // Process CSV file
-      const teamsData = await processCsvFile(file);
-      
-      if (teamsData.length === 0) {
-        alert('No valid teams found in the CSV file.');
-        return;
-      }
-      
-      // Create teams in Firebase
-      const createdTeams = [];
-      let successCount = 0;
-      let errorCount = 0;
-      
-      for (const teamData of teamsData) {
-        try {
-          const teamId = await teamsService.create(teamData);
-          createdTeams.push({ id: teamId, ...teamData, players: 0 });
-          successCount++;
-        } catch (error) {
-          console.error(`Error creating team ${teamData.name}:`, error);
-          errorCount++;
-        }
-      }
-      
-      // Update local state
-      setTeams(prevTeams => [...prevTeams, ...createdTeams]);
-      setShowCsvModal(false);
-      
-      // Show results
-      const message = `CSV Upload Complete!\n\n✅ Successfully created: ${successCount} teams\n${errorCount > 0 ? `❌ Failed to create: ${errorCount} teams` : ''}`;
-      alert(message);
-      
-    } catch (error) {
-      console.error('Error processing CSV:', error);
-      alert(`Error processing CSV file: ${error.message}`);
-    } finally {
-      setCsvUploading(false);
-    }
-  };
-
-  // Drag and drop handlers
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!csvUploading) {
-      setDragOver(true);
-    }
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragOver(false);
-    
-    if (csvUploading) return;
-    
-    const files = Array.from(e.dataTransfer.files);
-    const csvFile = files.find(file => file.name.toLowerCase().endsWith('.csv'));
-    
-    if (csvFile) {
-      handleCsvUpload(csvFile);
-    } else {
-      alert('Please drop a CSV file (.csv)');
-    }
-  };
+  /* Removed legacy CSV helpers and duplicate drag handlers */
 
   // Show loading screen while auth is being determined or role is being loaded
   if (authLoading || (currentUser && userRole === null)) {
@@ -490,7 +499,10 @@ export default function TeamManagement() {
                 Team
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Captain
+                Captain / Vice Captain
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Mentor
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Email
@@ -501,7 +513,7 @@ export default function TeamManagement() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Players
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
                 Actions
               </th>
             </tr>
@@ -509,7 +521,7 @@ export default function TeamManagement() {
           <tbody className="bg-white divide-y divide-gray-200">
             {loading ? (
               <tr>
-                <td colSpan="6" className="px-6 py-12 text-center">
+                <td colSpan="7" className="px-6 py-12 text-center">
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D0620D] mr-3"></div>
                     <span className="text-gray-500">Loading teams...</span>
@@ -518,7 +530,7 @@ export default function TeamManagement() {
               </tr>
             ) : teams.length === 0 ? (
               <tr>
-                <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
+                <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
                   No teams found. Add your first team to get started.
                 </td>
               </tr>
@@ -526,7 +538,7 @@ export default function TeamManagement() {
               teams.map((team) => (
               <tr key={team.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
+                  <div className="flex items-start">
                     {team.logo ? (
                       <img 
                         src={team.logo} 
@@ -543,32 +555,72 @@ export default function TeamManagement() {
                         </span>
                       </div>
                     )}
-                    <div className="text-sm font-medium text-gray-900">{team.name}</div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{team.name}</div>
+                      <div className="mt-1 text-xs text-gray-600 leading-4">
+                        <div>
+                          Total Spent: <span className="text-gray-900 font-semibold">৳{(() => {
+                            const soldSpent = (team.spent ?? (players.filter(p => p.team === team.name).reduce((s, p) => s + (Number(p.soldPrice) || 0), 0)));
+                            const raiseSpent = (team.raiseSpent ?? 0);
+                            return Number(soldSpent + raiseSpent).toLocaleString();
+                          })()}</span>
+                        </div>
+                        <div>
+                          Total Left: <span className="text-[#D0620D] font-semibold">৳{(() => {
+                            const total = (team.totalBalance ?? 500000);
+                            const soldSpent = (team.spent ?? (players.filter(p => p.team === team.name).reduce((s, p) => s + (Number(p.soldPrice) || 0), 0)));
+                            const raiseSpent = (team.raiseSpent ?? 0);
+                            return Math.max(total - (soldSpent + raiseSpent), 0).toLocaleString();
+                          })()}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {(() => {
                     const teamPlayers = players.filter(player => player.team === team.name);
-                    
                     if (teamPlayers.length === 0) {
                       return <span className="text-gray-400 italic">No players assigned</span>;
                     }
-                    
                     return (
-                      <select
-                        value={team.captain || ''}
-                        onChange={(e) => handleCaptainChange(team.id, e.target.value)}
-                        className="px-3 py-1 border border-gray-300 rounded focus:ring-[#D0620D] focus:border-[#D0620D] text-sm bg-white"
-                      >
-                        <option value="">Select Captain</option>
-                        {teamPlayers.map(player => (
-                          <option key={player.id} value={player.name}>
-                            {player.name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Captain</label>
+                          <select
+                            value={team.captain || ''}
+                            onChange={(e) => handleCaptainChange(team.id, e.target.value)}
+                            className="px-3 py-1 border border-gray-300 rounded focus:ring-[#D0620D] focus:border-[#D0620D] text-sm bg-white w-full"
+                          >
+                            <option value="">Select Captain</option>
+                            {teamPlayers.map(player => (
+                              <option key={player.id} value={player.name}>
+                                {player.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Vice Captain</label>
+                          <select
+                            value={team.viceCaptain || ''}
+                            onChange={(e) => handleViceCaptainChange(team.id, e.target.value)}
+                            className="px-3 py-1 border border-gray-300 rounded focus:ring-[#D0620D] focus:border-[#D0620D] text-sm bg-white w-full"
+                          >
+                            <option value="">Select Vice Captain</option>
+                            {teamPlayers.map(player => (
+                              <option key={player.id} value={player.name}>
+                                {player.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                     );
                   })()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {team.mentor || <span className="text-gray-400 italic">No mentor</span>}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {team.email || <span className="text-gray-400 italic">No email</span>}
@@ -602,19 +654,27 @@ export default function TeamManagement() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   {team.players}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleEditTeam(team)}
-                    className="text-[#D0620D] hover:text-[#B8540B] mr-4"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteTeam(team.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    Delete
-                  </button>
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                  <div className="flex items-center justify-center space-x-3">
+                    <button
+                      onClick={() => handleEditTeam(team)}
+                      className="text-[#D0620D] hover:text-[#B8540B]"
+                      title="Edit Team"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTeam(team.id)}
+                      className="text-red-600 hover:text-red-900"
+                      title="Delete Team"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V5a2 2 0 012-2h2a2 2 0 012 2v2m-9 0h10" />
+                      </svg>
+                    </button>
+                  </div>
                 </td>
               </tr>
               ))
@@ -634,7 +694,9 @@ export default function TeamManagement() {
               const logoFile = formData.get('logo');
               
               const teamData = {
-                name: formData.get('name')
+                name: formData.get('name'),
+                mentor: formData.get('mentor'),
+                email: formData.get('email')
               };
               
               // Pass both team data and logo file
@@ -650,6 +712,27 @@ export default function TeamManagement() {
                     required
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Mentor Name</label>
+                  <input
+                    type="text"
+                    name="mentor"
+                    defaultValue={editingTeam.mentor || ''}
+                    placeholder="e.g., Dr. Rahman"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Team Owner Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    defaultValue={editingTeam.email || ''}
+                    placeholder="e.g., owner@example.com"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">If new email is provided, an owner account will be created and credentials stored.</p>
                 </div>
                 
                 <div>
@@ -729,7 +812,8 @@ export default function TeamManagement() {
               const teamData = {
                 name: formData.get('name'),
                 captain: formData.get('captain'),
-                email: formData.get('email')
+                email: formData.get('email'),
+                mentor: formData.get('mentor')
               };
               
               // Pass both team data and logo file
@@ -743,6 +827,15 @@ export default function TeamManagement() {
                     name="name"
                     required
                     placeholder="e.g., UIU Thunders"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Mentor Name</label>
+                  <input
+                    type="text"
+                    name="mentor"
+                    placeholder="e.g., Dr. Rahman"
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-[#D0620D] focus:border-[#D0620D]"
                   />
                 </div>
@@ -799,14 +892,14 @@ export default function TeamManagement() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                 <h4 className="font-medium text-blue-900 mb-2">📋 CSV Format Requirements:</h4>
                 <div className="text-sm text-blue-800 space-y-1">
-                  <p><strong>Required columns:</strong> name, captain</p>
-                  <p><strong>Optional columns:</strong> logo</p>
+                  <p><strong>Required columns:</strong> name</p>
+                  <p><strong>Optional columns:</strong> email, captain, mentor, logo</p>
                   <p><strong>Example:</strong></p>
                   <div className="bg-white border rounded p-2 mt-2 font-mono text-xs">
-                    name,captain,logo<br/>
-                    UIU Tigers,Rafiqul Islam,<br/>
-                    UIU Eagles,Aminul Haque,<br/>
-                    UIU Lions,Shahidul Rahman,
+                    name,email,captain,mentor,logo<br/>
+                    UIU Tigers,owner1@example.com,Rafiqul Islam,Dr. Rahman,<br/>
+                    UIU Eagles,owner2@example.com,Aminul Haque,,<br/>
+                    UIU Lions,,Shahidul Rahman,Prof. Karim,
                   </div>
                 </div>
               </div>
@@ -868,39 +961,11 @@ export default function TeamManagement() {
                 </div>
               </div>
             )}
-
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setShowCsvModal(false)}
-                disabled={csvUploading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
-              >
-                {csvUploading ? 'Processing...' : 'Cancel'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  // Download sample CSV
-                  const csvContent = "name,captain,logo\nUIU Tigers,Rafiqul Islam,\nUIU Eagles,Aminul Haque,\nUIU Lions,Shahidul Rahman,";
-                  const blob = new Blob([csvContent], { type: 'text/csv' });
-                  const url = window.URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = 'teams_sample.csv';
-                  a.click();
-                  window.URL.revokeObjectURL(url);
-                }}
-                className="px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200"
-              >
-                📥 Download Sample
-              </button>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* Delete Team Modal */}
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">

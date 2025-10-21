@@ -148,6 +148,20 @@ export default function TeamDetail({ params }) {
                 <span className="text-gray-500 italic">Not assigned</span>
               )}
             </p>
+            <p className="text-lg text-gray-300">
+              Vice Captain: {team.viceCaptain ? (
+                <span className="text-white font-medium">{team.viceCaptain}</span>
+              ) : (
+                <span className="text-gray-500 italic">Not assigned</span>
+              )}
+            </p>
+            <p className="text-lg text-gray-300">
+              Mentor: {team.mentor ? (
+                <span className="text-white font-medium">{team.mentor}</span>
+              ) : (
+                <span className="text-gray-500 italic">Not set</span>
+              )}
+            </p>
           </div>
         </div>
       </section>
@@ -201,12 +215,13 @@ export default function TeamDetail({ params }) {
               {players.map((player, index) => (
                 <div key={player.id || index} className="border border-gray-700 rounded-xl p-6" style={{ backgroundColor: '#0A0D13' }}>
                   <div className="flex items-center mb-4">
-                    <div className="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center mr-4">
-                      <span className="text-lg">
-                        {player.position === 'Goalkeeper' ? '🥅' : 
-                         player.position === 'Defender' ? '🛡️' : 
-                         player.position === 'Midfielder' ? '⚽' : '🎯'}
-                      </span>
+                    <div className="w-12 h-12 bg-gray-800 rounded-full overflow-hidden flex items-center justify-center mr-4">
+                      <img
+                        src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(player.uniId || '')}`}
+                        alt={`${player.name} photo`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-white">{player.name}</h3>
@@ -214,6 +229,11 @@ export default function TeamDetail({ params }) {
                       {player.name === team.captain && (
                         <span className="inline-block bg-[#D0620D] text-white text-xs px-2 py-1 rounded-full mt-1">
                           Captain
+                        </span>
+                      )}
+                      {player.name === team.viceCaptain && (
+                        <span className="inline-block bg-gray-800 text-white text-xs px-2 py-1 rounded-full mt-1 ml-2">
+                          Vice Captain
                         </span>
                       )}
                     </div>
