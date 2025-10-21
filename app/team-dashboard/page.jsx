@@ -95,7 +95,7 @@ export default function TeamOwnerDashboard() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
         {/* Team Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-8">
-          <div className="flex items-center space-x-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6 text-center sm:text-left">
             {team.logo ? (
               <img 
                 src={team.logo} 
@@ -187,87 +187,128 @@ export default function TeamOwnerDashboard() {
           </div>
           
           {players.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Player
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Position
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Sold Price
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Semester
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      University ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Role
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {players.map((player) => (
-                    <tr key={player.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center border border-gray-300">
-                            <img
-                              src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(player.uniId || '')}`}
-                              alt={`${player.name} photo`}
-                              className="w-full h-full object-cover"
-                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                            />
-                          </div>
-                          <div className="text-sm font-medium text-gray-900">{player.name}</div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <span className="text-lg mr-2">
-                            {player.position === 'Goalkeeper' ? '🥅' : 
-                             player.position === 'Defender' ? '🛡️' : 
-                             player.position === 'Midfielder' ? '⚽' : '🎯'}
-                          </span>
-                          <span className="text-sm text-gray-900">{player.position}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+            <>
+              {/* Mobile List */}
+              <div className="md:hidden divide-y divide-gray-200">
+                {players.map((player) => (
+                  <div key={player.id} className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center border border-gray-300">
+                        <img
+                          src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(player.uniId || '')}`}
+                          alt={`${player.name} photo`}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold text-gray-900">{player.name}</div>
+                        <div className="text-xs text-gray-500">{player.position} • {player.uniId}</div>
+                      </div>
+                      <div className="text-right">
                         {player.soldPrice && player.soldPrice > 0 ? (
-                          <span className="text-green-600 font-semibold">৳{Number(player.soldPrice).toLocaleString()}</span>
+                          <span className="text-green-600 font-semibold text-sm">৳{Number(player.soldPrice).toLocaleString()}</span>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400 text-sm">—</span>
                         )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {player.semester}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {player.uniId}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {player.name === team.captain ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#D0620D] text-white">
-                            Captain
-                          </span>
-                        ) : player.name === team.viceCaptain ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-800 text-white">
-                            Vice Captain
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-500">Player</span>
-                        )}
-                      </td>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      {player.name === team.captain ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#D0620D] text-white">Captain</span>
+                      ) : player.name === team.viceCaptain ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-800 text-white">Vice Captain</span>
+                      ) : (
+                        <span className="text-xs text-gray-500">Player</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Player
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Position
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Sold Price
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Semester
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        University ID
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Role
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {players.map((player) => (
+                      <tr key={player.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center border border-gray-300">
+                              <img
+                                src={`https://dsa.uiu.ac.bd/loan/api/photo/${encodeURIComponent(player.uniId || '')}`}
+                                alt={`${player.name} photo`}
+                                className="w-full h-full object-cover"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            </div>
+                            <div className="text-sm font-medium text-gray-900">{player.name}</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <span className="text-lg mr-2">
+                              {player.position === 'Goalkeeper' ? '🥅' : 
+                               player.position === 'Defender' ? '🛡️' : 
+                               player.position === 'Midfielder' ? '⚽' : '🎯'}
+                            </span>
+                            <span className="text-sm text-gray-900">{player.position}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          {player.soldPrice && player.soldPrice > 0 ? (
+                            <span className="text-green-600 font-semibold">৳{Number(player.soldPrice).toLocaleString()}</span>
+                          ) : (
+                            <span className="text-gray-400">—</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {player.semester}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {player.uniId}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {player.name === team.captain ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#D0620D] text-white">
+                              Captain
+                            </span>
+                          ) : player.name === team.viceCaptain ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-800 text-white">
+                              Vice Captain
+                            </span>
+                          ) : (
+                            <span className="text-sm text-gray-500">Player</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           ) : (
             <div className="text-center py-12">
               <div className="text-gray-400 text-6xl mb-4">⚽</div>
@@ -280,16 +321,16 @@ export default function TeamOwnerDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="mt-8 flex justify-center space-x-4">
+        <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4">
           <Link 
             href="/teams" 
-            className="bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors"
+            className="w-full sm:w-auto text-center bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors"
           >
             View All Teams
           </Link>
           <Link 
             href="/auction" 
-            className="bg-[#D0620D] text-white px-6 py-3 rounded-lg hover:bg-[#B8540B] transition-colors"
+            className="w-full sm:w-auto text-center bg-[#D0620D] text-white px-6 py-3 rounded-lg hover:bg-[#B8540B] transition-colors"
           >
             View Auction
           </Link>
